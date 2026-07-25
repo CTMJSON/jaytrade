@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
-import SearchBar from './components/SearchBar';
 import TradePanel from './components/TradePanel';
 import Portfolio from './components/Portfolio';
 import TradeHistory from './components/TradeHistory';
@@ -61,12 +60,15 @@ export default function App() {
 
       <IndexCharts />
 
-      <SearchBar onSelect={setSelectedSymbol} />
-
       <PortfolioSummary portfolio={portfolio} onSelectSymbol={setSelectedSymbol} />
 
       <div className="main-grid">
-        <TradePanel symbol={selectedSymbol} onTradeComplete={refresh} cash={portfolio?.cash} />
+        <TradePanel
+          symbol={selectedSymbol}
+          onSelectSymbol={setSelectedSymbol}
+          onTradeComplete={refresh}
+          cash={portfolio?.cash}
+        />
         <Portfolio portfolio={portfolio} onSelectSymbol={setSelectedSymbol} />
       </div>
 

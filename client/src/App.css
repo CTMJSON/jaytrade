@@ -165,12 +165,10 @@ h1, h2, h3, h4 {
   background: var(--bg-white);
 }
 
-.trade-panel.empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.trade-panel-hint {
   color: var(--accent-gray);
   text-align: center;
+  padding: 20px 0;
 }
 
 .trade-header {
