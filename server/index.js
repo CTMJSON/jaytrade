@@ -17,6 +17,7 @@ import { computeMovers, computeIndices, computeHistory } from './dashboard.js';
 import { startCacheWarmer } from './warmer.js';
 import { buildPortfolioSummary } from './portfolio-analytics.js';
 import { computeHoldingSignals } from './signals.js';
+import { register, login, logout, requireAuth, AuthError } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -24,6 +25,45 @@ app.use(cors());
 app.use(express.json());
 
 const STARTING_CASH = Number(process.env.STARTING_CASH || 100000);
+
+// --- Auth (name + PIN accounts) ---
+
+app.post('/api/auth/register', (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const pin = String(req.body.pin || '').trim();
+  try {
+    const token = register(name, pin, STARTING_CASH);
+    res.json({ token, name });
+  } catch (err) {
+    if (err instanceof AuthError) return res.status(400).json({ error: err.message });
+    throw err;
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const name = String(req.body.name || '').trim();
+  const pin = String(req.body.pin || '').trim();
+  try {
+    const token = login(name, pin);
+    res.json({ token, name });
+  } catch (err) {
+    if (err instanceof AuthError) return res.status(401).json({ error: err.message });
+    throw err;
+  }
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  logout(token);
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ name: req.account.name });
+});
+
+// --- Shared market data (no auth - same for every account) ---
 
 app.get('/api/search', async (req, res) => {
   const q = String(req.query.q || '').trim();
@@ -82,13 +122,15 @@ app.get('/api/indices', async (req, res) => {
   res.json(await computeIndices());
 });
 
-app.get('/api/portfolio', async (req, res) => {
-  res.json(await buildPortfolioSummary(STARTING_CASH));
+// --- Account-scoped routes (require login) ---
+
+app.get('/api/portfolio', requireAuth, async (req, res) => {
+  res.json(await buildPortfolioSummary(req.account.id));
 });
 
-app.get('/api/portfolio/signals', async (req, res) => {
+app.get('/api/portfolio/signals', requireAuth, async (req, res) => {
   try {
-    const portfolio = await buildPortfolioSummary(STARTING_CASH);
+    const portfolio = await buildPortfolioSummary(req.account.id);
     const signals = await computeHoldingSignals(portfolio.holdings);
     res.json(signals);
   } catch (err) {
@@ -96,12 +138,12 @@ app.get('/api/portfolio/signals', async (req, res) => {
   }
 });
 
-app.get('/api/trades', (req, res) => {
-  const trades = db.prepare('SELECT * FROM trades ORDER BY id DESC LIMIT 100').all();
+app.get('/api/trades', requireAuth, (req, res) => {
+  const trades = db.prepare('SELECT * FROM trades WHERE account_id = ? ORDER BY id DESC LIMIT 100').all(req.account.id);
   res.json(trades);
 });
 
-app.post('/api/trade', async (req, res) => {
+app.post('/api/trade', requireAuth, async (req, res) => {
   const { symbol: rawSymbol, side, quantity } = req.body;
   const symbol = String(rawSymbol || '').toUpperCase().trim();
   const qty = Number(quantity);
@@ -119,7 +161,7 @@ app.post('/api/trade', async (req, res) => {
   if (!quote) return res.status(404).json({ error: 'Symbol not found' });
 
   try {
-    const result = executeTrade(symbol, side, qty, quote.current, 'MANUAL');
+    const result = executeTrade(req.account.id, symbol, side, qty, quote.current, 'MANUAL');
     res.json({ success: true, ...result });
   } catch (err) {
     if (err instanceof TradeError) return res.status(400).json({ error: err.message });
@@ -127,11 +169,11 @@ app.post('/api/trade', async (req, res) => {
   }
 });
 
-app.get('/api/orders', (req, res) => {
-  res.json(listOrders());
+app.get('/api/orders', requireAuth, (req, res) => {
+  res.json(listOrders(req.account.id));
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', requireAuth, (req, res) => {
   const { symbol: rawSymbol, side, condition, triggerPrice, amountUsd, quantity } = req.body;
   const symbol = String(rawSymbol || '').toUpperCase().trim();
   const price = Number(triggerPrice);
@@ -148,7 +190,7 @@ app.post('/api/orders', (req, res) => {
     if (!Number.isFinite(amount) || amount <= 0) {
       return res.status(400).json({ error: 'amountUsd must be a positive number for BUY orders' });
     }
-    const order = createOrder({ symbol, side, condition, triggerPrice: price, amountUsd: amount });
+    const order = createOrder(req.account.id, { symbol, side, condition, triggerPrice: price, amountUsd: amount });
     return res.json(order);
   }
 
@@ -156,23 +198,24 @@ app.post('/api/orders', (req, res) => {
   if (qty != null && (!Number.isFinite(qty) || qty <= 0)) {
     return res.status(400).json({ error: 'quantity must be a positive number or omitted to sell all holdings' });
   }
-  const order = createOrder({ symbol, side, condition, triggerPrice: price, quantity: qty });
+  const order = createOrder(req.account.id, { symbol, side, condition, triggerPrice: price, quantity: qty });
   res.json(order);
 });
 
-app.post('/api/orders/:id/cancel', (req, res) => {
-  const order = cancelOrder(Number(req.params.id));
+app.post('/api/orders/:id/cancel', requireAuth, (req, res) => {
+  const order = cancelOrder(req.account.id, Number(req.params.id));
   if (!order) return res.status(404).json({ error: 'Order not found' });
   res.json(order);
 });
 
-app.post('/api/reset', (req, res) => {
+app.post('/api/reset', requireAuth, (req, res) => {
+  const accountId = req.account.id;
   db.exec('BEGIN');
   try {
-    db.prepare('DELETE FROM holdings').run();
-    db.prepare('DELETE FROM trades').run();
-    db.prepare('DELETE FROM orders').run();
-    db.prepare('UPDATE account SET cash = ? WHERE id = 1').run(STARTING_CASH);
+    db.prepare('DELETE FROM holdings WHERE account_id = ?').run(accountId);
+    db.prepare('DELETE FROM trades WHERE account_id = ?').run(accountId);
+    db.prepare('DELETE FROM orders WHERE account_id = ?').run(accountId);
+    db.prepare('UPDATE accounts SET cash = starting_cash WHERE id = ?').run(accountId);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');

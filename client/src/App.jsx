@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api } from './api';
+import { api, auth } from './api';
 import TradePanel from './components/TradePanel';
 import Portfolio from './components/Portfolio';
 import TradeHistory from './components/TradeHistory';
@@ -9,14 +9,26 @@ import MarketSummary from './components/MarketSummary';
 import ActiveStocks from './components/ActiveStocks';
 import OrdersPanel from './components/OrdersPanel';
 import PortfolioSummary from './components/PortfolioSummary';
+import Login from './components/Login';
 import Logo from './components/Logo';
 import './App.css';
 
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState(auth.isLoggedIn());
   const [selectedSymbol, setSelectedSymbol] = useState(null);
   const [portfolio, setPortfolio] = useState(null);
   const [trades, setTrades] = useState([]);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    function handleUnauthorized() {
+      setLoggedIn(false);
+      setPortfolio(null);
+      setTrades([]);
+    }
+    window.addEventListener('jaytrade:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('jaytrade:unauthorized', handleUnauthorized);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -30,16 +42,29 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!loggedIn) return;
     refresh();
     const interval = setInterval(refresh, 15000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [loggedIn, refresh]);
 
   async function handleReset() {
     if (!confirm('Reset your portfolio back to starting cash? This clears all holdings and trade history.')) return;
     await api.reset();
     setSelectedSymbol(null);
     refresh();
+  }
+
+  async function handleLogout() {
+    await auth.logout();
+    setLoggedIn(false);
+    setPortfolio(null);
+    setTrades([]);
+    setSelectedSymbol(null);
+  }
+
+  if (!loggedIn) {
+    return <Login onLoggedIn={() => setLoggedIn(true)} />;
   }
 
   return (
@@ -49,7 +74,11 @@ export default function App() {
           <Logo size={36} />
           <h1>JayTrade</h1>
         </div>
-        <button className="reset-button" onClick={handleReset}>Reset Portfolio</button>
+        <div className="header-actions">
+          <span className="account-badge">{auth.accountName()}</span>
+          <button className="reset-button" onClick={handleReset}>Reset Portfolio</button>
+          <button className="logout-button" onClick={handleLogout}>Log Out</button>
+        </div>
       </header>
 
       {error && <div className="banner error">{error}</div>}

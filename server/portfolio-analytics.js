@@ -5,9 +5,10 @@ function pick(arr, keyFn, better) {
   return arr.reduce((best, item) => (best == null || better(keyFn(item), keyFn(best)) ? item : best), null);
 }
 
-export async function buildPortfolioSummary(startingCash) {
-  const account = db.prepare('SELECT cash FROM account WHERE id = 1').get();
-  const rows = db.prepare('SELECT symbol, quantity, avg_cost FROM holdings WHERE quantity > 0').all();
+export async function buildPortfolioSummary(accountId) {
+  const account = db.prepare('SELECT cash, starting_cash FROM accounts WHERE id = ?').get(accountId);
+  const startingCash = account.starting_cash;
+  const rows = db.prepare('SELECT symbol, quantity, avg_cost FROM holdings WHERE account_id = ? AND quantity > 0').all(accountId);
 
   const enriched = await Promise.all(
     rows.map(async (h) => {
