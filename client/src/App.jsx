@@ -9,6 +9,7 @@ import IndexCharts from './components/IndexCharts';
 import MarketSummary from './components/MarketSummary';
 import ActiveStocks from './components/ActiveStocks';
 import OrdersPanel from './components/OrdersPanel';
+import PortfolioSummary from './components/PortfolioSummary';
 import Logo from './components/Logo';
 import './App.css';
 
@@ -61,6 +62,8 @@ export default function App() {
       <IndexCharts />
 
       <SearchBar onSelect={setSelectedSymbol} />
+
+      <PortfolioSummary portfolio={portfolio} onSelectSymbol={setSelectedSymbol} />
 
       <div className="main-grid">
         <TradePanel symbol={selectedSymbol} onTradeComplete={refresh} cash={portfolio?.cash} />

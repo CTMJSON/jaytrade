@@ -16,6 +16,7 @@ import { createOrder, listOrders, cancelOrder, checkAndExecuteOrders } from './o
 import { cached } from './cache.js';
 import { computeMovers, computeIndices, computeHistory } from './dashboard.js';
 import { startCacheWarmer } from './warmer.js';
+import { buildPortfolioSummary } from './portfolio-analytics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -82,49 +83,7 @@ app.get('/api/indices', async (req, res) => {
 });
 
 app.get('/api/portfolio', async (req, res) => {
-  const account = db.prepare('SELECT cash FROM account WHERE id = 1').get();
-  const holdings = db.prepare('SELECT symbol, quantity, avg_cost FROM holdings WHERE quantity > 0').all();
-
-  const enriched = await Promise.all(
-    holdings.map(async (h) => {
-      let quote = null;
-      try {
-        quote = await getQuote(h.symbol);
-      } catch {
-        quote = null;
-      }
-      const currentPrice = quote?.current ?? h.avg_cost;
-      const marketValue = currentPrice * h.quantity;
-      const costBasis = h.avg_cost * h.quantity;
-      const unrealizedPL = marketValue - costBasis;
-      const unrealizedPLPercent = costBasis > 0 ? (unrealizedPL / costBasis) * 100 : 0;
-      return {
-        symbol: h.symbol,
-        quantity: h.quantity,
-        avgCost: h.avg_cost,
-        currentPrice,
-        marketValue,
-        costBasis,
-        unrealizedPL,
-        unrealizedPLPercent,
-      };
-    })
-  );
-
-  const holdingsValue = enriched.reduce((sum, h) => sum + h.marketValue, 0);
-  const totalValue = account.cash + holdingsValue;
-  const totalPL = totalValue - STARTING_CASH;
-  const totalPLPercent = (totalPL / STARTING_CASH) * 100;
-
-  res.json({
-    cash: account.cash,
-    startingCash: STARTING_CASH,
-    holdingsValue,
-    totalValue,
-    totalPL,
-    totalPLPercent,
-    holdings: enriched,
-  });
+  res.json(await buildPortfolioSummary(STARTING_CASH));
 });
 
 app.get('/api/trades', (req, res) => {
