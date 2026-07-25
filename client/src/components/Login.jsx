@@ -45,7 +45,7 @@ export default function Login({ onLoggedIn }) {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. jake"
+              placeholder="e.g. jason"
               autoFocus
               required
             />
