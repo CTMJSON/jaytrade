@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { Area, ComposedChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line } from 'recharts';
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'AMZN', 'NVDA', 'META', 'TSLA', 'GOOGL', 'AMD', 'SPY', 'QQQ'];
 const SMA_WINDOW = 10;
+const GREEN = '#00e676';
+const RED = '#ff3b5c';
 
 function withMovingAverage(points) {
   return points.map((p, i) => {
@@ -84,6 +86,7 @@ export default function MarketSummary({ onSelectSymbol }) {
   }
 
   const isGain = priceChange ? priceChange.percent >= 0 : true;
+  const lineColor = isGain ? GREEN : RED;
 
   return (
     <div className="panel market-summary">
@@ -140,25 +143,46 @@ export default function MarketSummary({ onSelectSymbol }) {
 
           {chart && (
             <ResponsiveContainer width="100%" height={280}>
-              <LineChart data={chart.points}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <ComposedChart data={chart.points}>
+                <defs>
+                  <linearGradient id="marketSummaryFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={lineColor} stopOpacity={0.32} />
+                    <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#232a38" />
                 <XAxis
                   dataKey="time"
                   type="number"
                   domain={['dataMin', 'dataMax']}
                   tickFormatter={formatTick}
-                  tick={{ fontSize: 11, fill: 'var(--accent-gray)' }}
+                  tick={{ fontSize: 11, fill: '#8b93a3' }}
                   minTickGap={60}
+                  axisLine={{ stroke: '#232a38' }}
+                  tickLine={{ stroke: '#232a38' }}
                 />
-                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11, fill: 'var(--accent-gray)' }} width={60} />
+                <YAxis
+                  domain={['auto', 'auto']}
+                  tick={{ fontSize: 11, fill: '#8b93a3' }}
+                  width={60}
+                  axisLine={{ stroke: '#232a38' }}
+                  tickLine={{ stroke: '#232a38' }}
+                />
                 <Tooltip
                   labelFormatter={formatTick}
                   formatter={(value, name) => [formatCurrency(value), name === 'sma' ? `${SMA_WINDOW}-pt avg` : 'Price']}
-                  contentStyle={{ background: '#fff', border: '1px solid var(--border-color)', fontSize: 12 }}
+                  contentStyle={{
+                    background: '#171d29',
+                    border: '1px solid #313c50',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    color: '#e7eaf1',
+                  }}
+                  labelStyle={{ color: '#8b93a3' }}
                 />
-                <Line type="monotone" dataKey="close" stroke={isGain ? '#00c853' : '#d32f2f'} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="sma" stroke="var(--accent-gray)" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
-              </LineChart>
+                <Area type="monotone" dataKey="close" stroke={lineColor} strokeWidth={2.5} fill="url(#marketSummaryFill)" dot={false} />
+                <Line type="monotone" dataKey="sma" stroke="#8b93a3" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </div>

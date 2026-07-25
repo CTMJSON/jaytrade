@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { LineChart, Line, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
+import { ComposedChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
+
+const GREEN = '#00e676';
+const RED = '#ff3b5c';
 
 export default function IndexCharts() {
   const [indices, setIndices] = useState([]);
@@ -45,6 +48,8 @@ export default function IndexCharts() {
           const last = idx.currentPrice ?? idx.points[idx.points.length - 1].close;
           const changePercent = ((last - first) / first) * 100;
           const isGain = changePercent >= 0;
+          const color = isGain ? GREEN : RED;
+          const gradientId = `idx-fill-${idx.symbol}`;
           return (
             <div key={idx.symbol} className="index-card">
               <div className="index-label">{idx.label}</div>
@@ -52,21 +57,27 @@ export default function IndexCharts() {
                 {formatCurrency(last)} <span>{formatPercent(changePercent)}</span>
               </div>
               <ResponsiveContainer width="100%" height={60}>
-                <LineChart data={idx.points}>
+                <ComposedChart data={idx.points}>
+                  <defs>
+                    <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={color} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
                   <YAxis domain={['dataMin', 'dataMax']} hide />
                   <Tooltip
                     formatter={(value) => formatCurrency(value)}
                     labelFormatter={(label) => label}
-                    contentStyle={{ background: '#1e1e1e', border: 'none', fontSize: 12 }}
+                    contentStyle={{
+                      background: '#171d29',
+                      border: '1px solid #313c50',
+                      borderRadius: 6,
+                      fontSize: 12,
+                      color: '#e7eaf1',
+                    }}
                   />
-                  <Line
-                    type="monotone"
-                    dataKey="close"
-                    stroke={isGain ? '#2fbf71' : '#ef4444'}
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                </LineChart>
+                  <Area type="monotone" dataKey="close" stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={false} />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           );
