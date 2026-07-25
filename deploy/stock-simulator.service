@@ -1,0 +1,16 @@
+[Unit]
+Description=Stock Trading Simulator
+After=network.target
+
+[Service]
+Type=simple
+User=jgpt2
+WorkingDirectory=/home/jgpt2/stock-simulator/server
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+ExecStart=/opt/nodejs/bin/node --max-old-space-size=192 index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
