@@ -1,10 +1,24 @@
 import { cached } from './cache.js';
+import { withRetry, fetchWithTimeout, createSemaphore } from './retry.js';
 
 const YAHOO_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
 
+// On constrained/low-core hardware, concurrent TLS handshakes to the same host can genuinely
+// starve each other for CPU (crypto work competes for libuv's threadpool) badly enough that
+// some time out entirely - something separate OS processes making the same calls never hit,
+// since those get scheduled across cores independently. This gate serializes every Yahoo
+// fetch application-wide (movers/indices/history/warmer alike) so that never happens.
+const yahooGate = createSemaphore(1);
+
 async function fetchChart(symbol, range, interval) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
-  const res = await fetch(url, { headers: { 'User-Agent': YAHOO_UA } });
+  // Retries only network-level failures (e.g. transient DNS/connect blips) - a bad HTTP
+  // status is not retried since that indicates a real, non-transient response from Yahoo.
+  // 'Connection: close' avoids reusing a pooled keep-alive socket that can go stale/dead
+  // and then hang every subsequent request against it until the timeout fires.
+  const res = await yahooGate(() =>
+    withRetry(() => fetchWithTimeout(url, { headers: { 'User-Agent': YAHOO_UA, Connection: 'close' } }))
+  );
   if (!res.ok) throw new Error(`Yahoo chart failed for ${symbol}: ${res.status}`);
   const data = await res.json();
   const result = data?.chart?.result?.[0];

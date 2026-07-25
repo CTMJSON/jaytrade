@@ -1,4 +1,5 @@
 import { cached } from './cache.js';
+import { withRetry, fetchWithTimeout } from './retry.js';
 
 const BASE_URL = 'https://finnhub.io/api/v1';
 
@@ -9,7 +10,9 @@ function apiKey() {
 }
 
 async function finnhubFetch(path) {
-  const res = await fetch(`${BASE_URL}${path}&token=${apiKey()}`);
+  // Retries only network-level failures, not 429/4xx/5xx HTTP responses (those are real,
+  // non-transient answers from Finnhub and retrying them would just add to rate pressure).
+  const res = await withRetry(() => fetchWithTimeout(`${BASE_URL}${path}&token=${apiKey()}`));
   if (res.status === 429) throw new Error('Finnhub rate limit reached, try again shortly');
   if (!res.ok) throw new Error(`Finnhub request failed: ${res.status}`);
   return res.json();

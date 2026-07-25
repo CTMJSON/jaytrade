@@ -1,15 +1,21 @@
 import 'dotenv/config';
+import dns from 'node:dns';
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import db from './db.js';
+
+// Some networks have a dead/blackholed IPv6 route that doesn't reject fast (unlike IPv4
+// refusals), so undici's happy-eyeballs can hang on it until timeout before falling back.
+// Preferring IPv4 first avoids that stall entirely for hosts that support both.
+dns.setDefaultResultOrder('ipv4first');
 import { searchSymbols, getQuote, getProfile, getRecommendationTrends } from './finnhub.js';
-import { getDailyHistory, getIntradayHistory, getVolumeStats } from './marketdata.js';
-import { MOVERS_WATCHLIST, INDEX_PROXIES } from './watchlist.js';
 import { executeTrade, TradeError } from './trading.js';
 import { createOrder, listOrders, cancelOrder, checkAndExecuteOrders } from './orders.js';
 import { cached } from './cache.js';
+import { computeMovers, computeIndices, computeHistory } from './dashboard.js';
+import { startCacheWarmer } from './warmer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -54,86 +60,25 @@ app.get('/api/recommendation/:symbol', async (req, res) => {
 
 app.get('/api/movers', async (req, res) => {
   try {
-    const data = await cached('movers', 3 * 60 * 1000, async () => {
-      const results = await Promise.all(
-        MOVERS_WATCHLIST.map(async (symbol) => {
-          try {
-            const [quote, profile, volStats] = await Promise.all([
-              getQuote(symbol),
-              getProfile(symbol).catch(() => null),
-              getVolumeStats(symbol).catch(() => null),
-            ]);
-            if (!quote) return null;
-            return {
-              symbol,
-              ...quote,
-              volume: volStats?.volume ?? null,
-              avgVolume: volStats?.avgVolume ?? null,
-              relativeVolume: volStats?.relativeVolume ?? null,
-              marketCap: profile?.marketCapitalization ?? null,
-              floatShares: profile?.floatingShare ?? null,
-            };
-          } catch {
-            return null;
-          }
-        })
-      );
-      const valid = results.filter(Boolean).filter((q) => q.percentChange != null);
-      const gainers = valid.filter((q) => q.percentChange >= 0).sort((a, b) => b.percentChange - a.percentChange);
-      const losers = valid.filter((q) => q.percentChange < 0).sort((a, b) => a.percentChange - b.percentChange);
-      return { gainers, losers };
-    });
-    res.json(data);
+    res.json(await computeMovers());
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
 });
-
-const historyFallback = new Map();
 
 app.get('/api/history/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   const range = req.query.range || '5d';
   const interval = req.query.interval || '15m';
-  const fallbackKey = `${symbol}:${range}:${interval}`;
   try {
-    const data = await cached(fallbackKey, 60 * 1000, () => getIntradayHistory(symbol, range, interval));
-    historyFallback.set(fallbackKey, data);
-    res.json(data);
+    res.json(await computeHistory(symbol, range, interval));
   } catch (err) {
-    const fallback = historyFallback.get(fallbackKey);
-    if (fallback) return res.json(fallback);
     res.status(502).json({ error: err.message });
   }
 });
 
-let indicesCache = { data: null, time: 0 };
-
 app.get('/api/indices', async (req, res) => {
-  const now = Date.now();
-  if (indicesCache.data && now - indicesCache.time < 5 * 60 * 1000) {
-    return res.json(indicesCache.data);
-  }
-
-  const results = await Promise.all(
-    INDEX_PROXIES.map(async ({ symbol, label }) => {
-      try {
-        const history = await getDailyHistory(symbol, '5d');
-        return { ...history, label };
-      } catch (err) {
-        return { symbol, label, error: err.message, points: [] };
-      }
-    })
-  );
-
-  const allFailed = results.every((r) => r.error);
-  if (allFailed && indicesCache.data) {
-    // Transient failure (e.g. right after restart) - serve last good data instead of "Unavailable"
-    return res.json(indicesCache.data);
-  }
-
-  indicesCache = { data: results, time: now };
-  res.json(results);
+  res.json(await computeIndices());
 });
 
 app.get('/api/portfolio', async (req, res) => {
@@ -279,6 +224,8 @@ const ORDER_POLL_INTERVAL = Number(process.env.ORDER_POLL_INTERVAL_MS || 60000);
 setInterval(() => {
   checkAndExecuteOrders().catch((err) => console.error('Order poll error:', err));
 }, ORDER_POLL_INTERVAL);
+
+startCacheWarmer();
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
