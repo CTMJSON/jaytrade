@@ -110,6 +110,26 @@ sudo systemctl enable --now stock-simulator
 
 This is exactly the setup this project runs on day to day: a Raspberry Pi on the local network, always on, with the app reachable at a friendly hostname over LAN DNS.
 
+#### Remote access via Cloudflare Tunnel
+
+To reach an always-on deployment from outside the local network without any port forwarding, [`deploy/cloudflared-tunnel.service`](deploy/cloudflared-tunnel.service) runs a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) pointed at `http://localhost:3001`:
+
+```bash
+sudo cp deploy/cloudflared-tunnel.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now cloudflared-tunnel
+```
+
+This is a free, account-less tunnel — no Cloudflare login, no domain, no exposed router port. The trade-off: the public `*.trycloudflare.com` URL is reassigned every time the service restarts (reboot, crash, manual restart), so it isn't a stable bookmark. Get the current URL with:
+
+```bash
+sudo journalctl -u cloudflared-tunnel --no-pager | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
+```
+
+Quick Tunnels also have no uptime guarantee and are meant for exactly this — trying things out — not production traffic. For a stable, permanent URL, use a [named tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/) tied to a domain in a Cloudflare account instead.
+
+Note also that this app has no login of its own — anyone with the tunnel URL can trade, cancel orders, or reset the portfolio. Harmless with fake money, but worth keeping in mind before sharing the link.
+
 ### Ephemeral / serverless hosting (Vercel, Netlify Functions, AWS Lambda, etc.)
 
 JayTrade will *run* on serverless platforms, but with real trade-offs, since there's no process alive between requests:
