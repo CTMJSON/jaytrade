@@ -50,6 +50,8 @@ cd client && npm run build
 
 The backend (`server/index.js`) serves the built `client/dist` directory as static files alongside the API, so a single Node process can serve the whole app — set `HOST=0.0.0.0` in `server/.env` to make it reachable on your LAN, then run `node index.js` (or set it up as a systemd/pm2 service for persistence).
 
+A sample systemd unit is in [`deploy/stock-simulator.service`](deploy/stock-simulator.service) — replace the `<your-username>` placeholders and the `node` path with your own before installing it.
+
 ## Environment variables (`server/.env`)
 
 | Variable | Description |

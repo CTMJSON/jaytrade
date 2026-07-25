@@ -4,11 +4,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=jgpt2
-WorkingDirectory=/home/jgpt2/stock-simulator/server
+User=<your-username>
+WorkingDirectory=/home/<your-username>/stock-simulator/server
 Environment=NODE_ENV=production
 Environment=HOST=0.0.0.0
-ExecStart=/opt/nodejs/bin/node --max-old-space-size=192 index.js
+# --max-old-space-size caps Node's heap; useful on memory-constrained devices (e.g. Raspberry Pi)
+ExecStart=/usr/bin/node --max-old-space-size=192 index.js
 Restart=on-failure
 RestartSec=5
 
