@@ -27,20 +27,22 @@ async function fetchChart(symbol, range, interval) {
 }
 
 export async function getDailyHistory(symbol, range = '5d') {
-  const result = await fetchChart(symbol, range, '1d');
-  const timestamps = result.timestamp || [];
-  const closes = result.indicators?.quote?.[0]?.close || [];
-  const points = timestamps
-    .map((t, i) => ({ date: new Date(t * 1000).toISOString().slice(0, 10), close: closes[i] }))
-    .filter((p) => p.close != null);
+  return cached(`daily:${symbol}:${range}`, 15 * 60 * 1000, async () => {
+    const result = await fetchChart(symbol, range, '1d');
+    const timestamps = result.timestamp || [];
+    const closes = result.indicators?.quote?.[0]?.close || [];
+    const points = timestamps
+      .map((t, i) => ({ date: new Date(t * 1000).toISOString().slice(0, 10), close: closes[i] }))
+      .filter((p) => p.close != null);
 
-  return {
-    symbol,
-    name: result.meta?.longName || result.meta?.shortName || symbol,
-    currentPrice: result.meta?.regularMarketPrice,
-    previousClose: result.meta?.chartPreviousClose,
-    points,
-  };
+    return {
+      symbol,
+      name: result.meta?.longName || result.meta?.shortName || symbol,
+      currentPrice: result.meta?.regularMarketPrice,
+      previousClose: result.meta?.chartPreviousClose,
+      points,
+    };
+  });
 }
 
 export async function getIntradayHistory(symbol, range = '5d', interval = '15m') {

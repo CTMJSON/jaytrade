@@ -1136,3 +1136,69 @@ h1, h2, h3, h4 {
 .ps-insight-info {
   border-left-color: var(--primary-blue);
 }
+
+.ps-signals {
+  margin-top: 18px;
+}
+
+.ps-signals-disclaimer {
+  font-weight: 400;
+  color: var(--text-dim);
+  text-transform: none;
+  font-size: 12px;
+}
+
+.ps-signals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ps-signal-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.ps-action-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-family: 'Open Sans', sans-serif;
+  white-space: nowrap;
+}
+
+.ps-action-add {
+  background: rgba(0, 230, 118, 0.15);
+  color: var(--secondary-green);
+}
+
+.ps-action-hold {
+  background: rgba(139, 147, 163, 0.15);
+  color: var(--text-dim);
+}
+
+.ps-action-trim {
+  background: rgba(255, 176, 32, 0.15);
+  color: #ffb020;
+}
+
+.ps-action-review {
+  background: rgba(255, 59, 92, 0.15);
+  color: var(--danger-red);
+}
+
+.ps-signal-reasons {
+  font-size: 12px;
+  color: var(--text-dim);
+  flex: 1;
+  min-width: 200px;
+}

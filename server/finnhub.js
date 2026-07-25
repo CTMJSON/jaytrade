@@ -65,6 +65,8 @@ export async function getProfile(symbol) {
 }
 
 export async function getRecommendationTrends(symbol) {
-  const data = await finnhubFetch(`/stock/recommendation?symbol=${encodeURIComponent(symbol)}`);
-  return data && data.length ? data[0] : null;
+  return cached(`rec:${symbol}`, 6 * 60 * 60 * 1000, async () => {
+    const data = await finnhubFetch(`/stock/recommendation?symbol=${encodeURIComponent(symbol)}`);
+    return data && data.length ? data[0] : null;
+  });
 }

@@ -32,4 +32,5 @@ export const api = {
   cancelOrder: (id) => request(`/orders/${id}/cancel`, { method: 'POST' }),
   history: (symbol, range = '5d', interval = '15m') =>
     request(`/history/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`),
+  portfolioSignals: () => request('/portfolio/signals'),
 };

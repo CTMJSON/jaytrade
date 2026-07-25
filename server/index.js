@@ -13,10 +13,10 @@ dns.setDefaultResultOrder('ipv4first');
 import { searchSymbols, getQuote, getProfile, getRecommendationTrends } from './finnhub.js';
 import { executeTrade, TradeError } from './trading.js';
 import { createOrder, listOrders, cancelOrder, checkAndExecuteOrders } from './orders.js';
-import { cached } from './cache.js';
 import { computeMovers, computeIndices, computeHistory } from './dashboard.js';
 import { startCacheWarmer } from './warmer.js';
 import { buildPortfolioSummary } from './portfolio-analytics.js';
+import { computeHoldingSignals } from './signals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -51,7 +51,7 @@ app.get('/api/quote/:symbol', async (req, res) => {
 app.get('/api/recommendation/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
-    const data = await cached(`rec:${symbol}`, 6 * 60 * 60 * 1000, () => getRecommendationTrends(symbol));
+    const data = await getRecommendationTrends(symbol);
     if (!data) return res.status(404).json({ error: 'No recommendation data' });
     res.json(data);
   } catch (err) {
@@ -84,6 +84,16 @@ app.get('/api/indices', async (req, res) => {
 
 app.get('/api/portfolio', async (req, res) => {
   res.json(await buildPortfolioSummary(STARTING_CASH));
+});
+
+app.get('/api/portfolio/signals', async (req, res) => {
+  try {
+    const portfolio = await buildPortfolioSummary(STARTING_CASH);
+    const signals = await computeHoldingSignals(portfolio.holdings);
+    res.json(signals);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 app.get('/api/trades', (req, res) => {

@@ -22,6 +22,40 @@ function useOrders(refreshKey) {
   return orders;
 }
 
+function useSignals(refreshKey) {
+  const [signals, setSignals] = useState([]);
+  useEffect(() => {
+    if (!refreshKey) {
+      setSignals([]);
+      return;
+    }
+    let cancelled = false;
+    api.portfolioSignals().then((data) => !cancelled && setSignals(data)).catch(() => {});
+    const interval = setInterval(() => {
+      api.portfolioSignals().then((data) => !cancelled && setSignals(data)).catch(() => {});
+    }, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [refreshKey]);
+  return signals;
+}
+
+const ACTION_LABELS = {
+  ADD: 'Consider Adding',
+  HOLD: 'Hold',
+  TRIM: 'Consider Trimming',
+  REVIEW: 'Review Position',
+};
+
+const ACTION_CLASS = {
+  ADD: 'ps-action-add',
+  HOLD: 'ps-action-hold',
+  TRIM: 'ps-action-trim',
+  REVIEW: 'ps-action-review',
+};
+
 function useRecommendations(symbols) {
   const [recs, setRecs] = useState({});
   useEffect(() => {
@@ -45,6 +79,7 @@ export default function PortfolioSummary({ portfolio, onSelectSymbol }) {
   const symbols = (portfolio?.holdings || []).map((h) => h.symbol);
   const orders = useOrders(symbols.join(','));
   const recs = useRecommendations(symbols);
+  const signals = useSignals(symbols.join(','));
 
   if (!portfolio || portfolio.holdings.length === 0) return null;
 
@@ -205,6 +240,28 @@ export default function PortfolioSummary({ portfolio, onSelectSymbol }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {signals.length > 0 && (
+        <div className="ps-signals">
+          <span className="ps-allocation-label">
+            Suggested Actions
+            <span className="ps-signals-disclaimer"> — simulated signal for this app, not real investment advice</span>
+          </span>
+          <div className="ps-signals-list">
+            {signals.map((s) => (
+              <div key={s.symbol} className="ps-signal-row">
+                <button className="ps-highlight-symbol" onClick={() => onSelectSymbol?.(s.symbol)}>
+                  {s.symbol}
+                </button>
+                <span className={`ps-action-badge ${ACTION_CLASS[s.action] || ''}`}>
+                  {ACTION_LABELS[s.action] || s.action}
+                </span>
+                <span className="ps-signal-reasons">{s.reasons.join(' · ')}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
