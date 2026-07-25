@@ -1,31 +1,61 @@
 # JayTrade
 
-A paper-trading stock market simulator. Trade real, live-priced US equities with fake currency, track profit/loss, browse market movers and index trends, and set automated buy/sell triggers.
+A paper-trading stock market simulator with a live, dark trading-terminal UI. Trade real, live-priced US equities with fake currency, get an analyst-style read on your portfolio, and set automated buy/sell triggers that execute on their own.
 
 ## Features
 
-- Live search and quotes for real-world traded companies (via Finnhub)
-- Portfolio tracking with real-time unrealized P/L
-- Buy/sell trading against live market prices
-- Scrolling market movers ticker (curated watchlist)
-- 5-day index charts (Dow/Nasdaq/S&P/Russell, via ETF proxies)
-- Analyst buy/hold/sell consensus per stock
-- Automated trigger orders: buy when a price drops below a threshold, sell when it rises above (or drops below) one
-- Trade history and one-click portfolio reset
+### Trading
+- Live search and quotes for real-world traded companies
+- Buy/sell trading priced against the live market at the moment of execution
+- Full trade history
+
+### Market data & discovery
+- **Market Summary** — a symbol list plus a big interactive intraday chart (5-day, 15-minute bars) with a moving-average overlay and a ticker search box
+- **Markets (5-Day)** — index-tracking sparkline charts for the Dow, Nasdaq, S&P 500, and Russell 2000
+- **Active Stocks** — paginated Biggest Gainers / Biggest Losers tables across a curated watchlist, with price, change, volume, relative volume, float, and market cap
+- A scrolling movers ticker across the top of the app
+- Per-stock analyst buy/hold/sell consensus
+
+### Portfolio intelligence
+The **Portfolio Summary** panel reads like an analyst's take on your holdings, not just a numbers dump:
+- Total value, all-time P/L, and today's move, each in dollars and percent
+- Realized vs. unrealized P/L split — how much of your gain is actually locked in
+- Today's best/worst mover and best/worst performer since purchase
+- Win/loss count across open positions
+- A visual allocation breakdown across every holding plus cash
+- **Things to Know** — automatic flags for concentration risk (one position dominating the portfolio), cash sitting idle, and positions with no active stop-loss coverage
+- **Suggested Actions** — a rules-based signal (Add / Hold / Trim / Review) per holding, combining analyst consensus, 5-day price trend, unrealized P/L, and position sizing, each with a plain-English reason. This is a transparent heuristic for a paper-trading simulator, not real investment advice, and is labeled as such in the UI.
+
+### Automation
+- Automated trigger orders: buy up to a set dollar amount when a price drops below a threshold, or sell a position when it drops below/rises above one
+- A background poller checks active triggers and executes them automatically, whether or not anyone has the app open
+
+## Design
+
+A dark, pro-trading-terminal aesthetic: near-black panels, a custom candlestick-mark logo, monospace numerics (JetBrains Mono) for all prices and P/L, gradient-filled charts, and motion (panel fade-ins, hover states) instead of a static dashboard.
 
 ## Stack
 
-- **Backend**: Node.js + Express, SQLite (via the built-in `node:sqlite` module — no native build step required)
-- **Frontend**: React + Vite, [recharts](https://recharts.org/) for charts
-- **Market data**: [Finnhub](https://finnhub.io/) (quotes, search, analyst recommendations) and Yahoo Finance's public chart endpoint (index history)
+- **Backend**: Node.js + Express, SQLite via the built-in `node:sqlite` module (no native build step)
+- **Frontend**: React + Vite, [Recharts](https://recharts.org/) for all charts
+- **Market data**: [Finnhub](https://finnhub.io/) (quotes, search, company profiles, analyst recommendations) and Yahoo Finance's public chart endpoint (index and intraday history, volume)
 
-## Local development
+### Reliability
+
+Live third-party market data is inherently flaky, so the backend is built to absorb that instead of surfacing it to the user:
+
+- A **background cache warmer** proactively refreshes movers, indices, and chart history on a schedule, so requests are served from a warm cache rather than triggering a live fetch
+- **Stale-fallback caching** — if a refresh fails, the last good data is served instead of an error
+- Request timeouts + retry-with-backoff on outbound calls, plus a concurrency gate on market-data requests to avoid overwhelming constrained hardware
+- Finnhub's free tier caps at 60 requests/minute; quotes, search, and the movers list are cached to stay well under that
+
+## Getting started
 
 ### Backend
 
 ```bash
 cd server
-cp .env.example .env   # then fill in your own Finnhub API key
+cp .env.example .env   # fill in your own Finnhub API key
 npm install
 npm run dev
 ```
@@ -42,17 +72,7 @@ npm run dev
 
 Runs on `http://localhost:5173` with a dev proxy to the backend API.
 
-## Production build
-
-```bash
-cd client && npm run build
-```
-
-The backend (`server/index.js`) serves the built `client/dist` directory as static files alongside the API, so a single Node process can serve the whole app — set `HOST=0.0.0.0` in `server/.env` to make it reachable on your LAN, then run `node index.js` (or set it up as a systemd/pm2 service for persistence).
-
-A sample systemd unit is in [`deploy/stock-simulator.service`](deploy/stock-simulator.service) — replace the `<your-username>` placeholders and the `node` path with your own before installing it.
-
-## Environment variables (`server/.env`)
+### Environment variables (`server/.env`)
 
 | Variable | Description |
 |---|---|
@@ -62,7 +82,45 @@ A sample systemd unit is in [`deploy/stock-simulator.service`](deploy/stock-simu
 | `STARTING_CASH` | Starting fake cash balance (default `100000`). |
 | `ORDER_POLL_INTERVAL_MS` | How often automated trigger orders are checked (default `60000`). |
 
+## Deployment
+
+```bash
+cd client && npm run build
+```
+
+The backend (`server/index.js`) serves the built `client/dist` directory as static files alongside the API, so a single Node process serves the entire app. Set `HOST=0.0.0.0` to make it reachable on your LAN.
+
+How well this app works depends a lot on *where* it's deployed, because several features rely on a long-running process:
+
+### Always-on hosting (Raspberry Pi, home server, VPS)
+
+This is the intended way to run JayTrade, and what it's tuned for. A persistent process means:
+
+- The background cache warmer keeps market data continuously fresh, so the dashboard feels live even on a cold page load
+- Automated trigger orders actually fire on their own — the poller checks prices and executes trades whether or not anyone has the app open
+- SQLite writes straight to disk and just works — no extra setup
+
+A sample systemd unit is in [`deploy/stock-simulator.service`](deploy/stock-simulator.service) — replace the `<your-username>` placeholders and the `node` binary path with your own, then:
+
+```bash
+sudo cp deploy/stock-simulator.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now stock-simulator
+```
+
+This is exactly the setup this project runs on day to day: a Raspberry Pi on the local network, always on, with the app reachable at a friendly hostname over LAN DNS.
+
+### Ephemeral / serverless hosting (Vercel, Netlify Functions, AWS Lambda, etc.)
+
+JayTrade will *run* on serverless platforms, but with real trade-offs, since there's no process alive between requests:
+
+- **No background warmer** — every function invocation is its own short-lived process, so there's nothing to keep the cache warm in the background. Data gets fetched fresh (or from whatever cache survives a warm function instance) per request instead of proactively ahead of time. Expect slower, less consistent load times than the always-on setup.
+- **Automated trigger orders won't fire on their own** — nothing is running continuously to poll prices, so a triggered order only executes if something external invokes the app (e.g. a scheduled function/cron hitting a dedicated endpoint). Out of the box, this feature is effectively inert on serverless.
+- **SQLite needs a persistent volume** — most serverless filesystems are ephemeral or read-only, so `server/simulator.sqlite` won't reliably persist between invocations. You'd need to point it at a mounted volume or swap in a hosted database.
+
+Serverless is a reasonable choice if you mainly want a live demo of the trading UI and live quotes, and don't need the automation or perfectly warm caches. For the full experience — automated triggers that actually run, and a dashboard that's always pre-warmed — run it as a persistent process instead.
+
 ## Notes on data sources
 
-- Finnhub's free tier caps at 60 requests/minute; the server caches quotes, search results, and the movers list to stay well under that.
-- Yahoo Finance's chart endpoint is unofficial and unauthenticated — it works well but isn't a documented/stable API, so it could change without notice.
+- Finnhub's free tier caps at 60 requests/minute and doesn't include trade volume — volume, relative volume, and moving averages are derived from Yahoo Finance's chart data instead.
+- Yahoo Finance's chart endpoint is unofficial and unauthenticated. It's reliable in practice but isn't a documented/stable API, so it could change without notice.
