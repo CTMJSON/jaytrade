@@ -1,11 +1,12 @@
 [Unit]
-Description=Cloudflare Quick Tunnel for JayTrade
+Description=Cloudflare Named Tunnel for JayTrade
 After=network.target stock-simulator.service
 Wants=stock-simulator.service
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:3001
+User=<your-username>
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/<your-username>/.cloudflared/config.yml run
 Restart=on-failure
 RestartSec=5
 

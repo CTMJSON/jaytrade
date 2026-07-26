@@ -112,7 +112,29 @@ This is exactly the setup this project runs on day to day: a Raspberry Pi on the
 
 #### Remote access via Cloudflare Tunnel
 
-To reach an always-on deployment from outside the local network without any port forwarding, [`deploy/cloudflared-tunnel.service`](deploy/cloudflared-tunnel.service) runs a [Cloudflare Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) pointed at `http://localhost:3001`:
+To reach an always-on deployment from outside the local network without any port forwarding, [`deploy/cloudflared-tunnel.service`](deploy/cloudflared-tunnel.service) runs `cloudflared` pointed at `http://localhost:3001`, using a **named tunnel** tied to a domain in a (free) Cloudflare account — unlike an account-less Quick Tunnel, this gives a permanent URL that survives restarts and reboots.
+
+One-time setup:
+
+```bash
+cloudflared tunnel login                          # opens a browser link to authorize against your Cloudflare account/domain
+cloudflared tunnel create jaytrade                 # writes credentials to ~/.cloudflared/<tunnel-id>.json
+cloudflared tunnel route dns jaytrade app.yourdomain.com   # creates the DNS record
+```
+
+Then point `~/.cloudflared/config.yml` at your tunnel and hostname:
+
+```yaml
+tunnel: <tunnel-id>
+credentials-file: /home/<your-username>/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: app.yourdomain.com
+    service: http://localhost:3001
+  - service: http_status:404
+```
+
+Replace the `<your-username>` placeholders in [`deploy/cloudflared-tunnel.service`](deploy/cloudflared-tunnel.service), then:
 
 ```bash
 sudo cp deploy/cloudflared-tunnel.service /etc/systemd/system/
@@ -120,15 +142,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now cloudflared-tunnel
 ```
 
-This is a free, account-less tunnel — no Cloudflare login, no domain, no exposed router port. The trade-off: the public `*.trycloudflare.com` URL is reassigned every time the service restarts (reboot, crash, manual restart), so it isn't a stable bookmark. Get the current URL with:
+The URL stays fixed across restarts since it's tied to the DNS record, not the tunnel process. (A free, account-less [Quick Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) is a faster way to try things out with zero setup, but its `*.trycloudflare.com` URL is reassigned on every restart — not recommended once you're sharing the link with others.)
 
-```bash
-sudo journalctl -u cloudflared-tunnel --no-pager | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1
-```
-
-Quick Tunnels also have no uptime guarantee and are meant for exactly this — trying things out — not production traffic. For a stable, permanent URL, use a [named tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/) tied to a domain in a Cloudflare account instead.
-
-Note also that this app has no login of its own — anyone with the tunnel URL can trade, cancel orders, or reset the portfolio. Harmless with fake money, but worth keeping in mind before sharing the link.
+Each user gets their own name + PIN account (see below) with an isolated portfolio, so the tunnel URL alone doesn't expose anyone else's trades or holdings — but there's no invite/allowlist, so anyone with the link can register their own account.
 
 ### Ephemeral / serverless hosting (Vercel, Netlify Functions, AWS Lambda, etc.)
 
