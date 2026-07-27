@@ -26,6 +26,18 @@ app.use(express.json());
 
 const STARTING_CASH = Number(process.env.STARTING_CASH || 100000);
 
+// The apex domain gets a static marketing page; every other hostname (app.jaytrade.vip,
+// localhost, the LAN hostname, etc.) gets the actual trading app below.
+const LANDING_HOST = process.env.LANDING_HOST || null;
+if (LANDING_HOST) {
+  const landingDir = path.join(__dirname, 'landing');
+  app.use('/landing/assets', express.static(path.join(landingDir, 'assets')));
+  app.get('/', (req, res, next) => {
+    if (req.hostname === LANDING_HOST) return res.sendFile(path.join(landingDir, 'index.html'));
+    next();
+  });
+}
+
 // --- Auth (name + PIN accounts) ---
 
 app.post('/api/auth/register', (req, res) => {

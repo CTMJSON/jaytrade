@@ -81,6 +81,7 @@ Runs on `http://localhost:5173` with a dev proxy to the backend API.
 | `HOST` | Interface to bind to (default `0.0.0.0`). |
 | `STARTING_CASH` | Starting fake cash balance (default `100000`). |
 | `ORDER_POLL_INTERVAL_MS` | How often automated trigger orders are checked (default `60000`). |
+| `LANDING_HOST` | Optional. If set (e.g. `jaytrade.vip`), requests whose `Host` header matches this exactly get a static marketing page ([`server/landing/index.html`](server/landing/index.html)) instead of the app - useful for serving a landing page at an apex domain while the app itself lives on a subdomain. Unset by default, so every hostname just gets the app. |
 
 ## Deployment
 
