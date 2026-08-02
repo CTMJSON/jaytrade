@@ -16,6 +16,8 @@ import { createOrder, listOrders, cancelOrder, checkAndExecuteOrders } from './o
 import { computeMovers, computeIndices, computeHistory } from './dashboard.js';
 import { startCacheWarmer } from './warmer.js';
 import { buildPortfolioSummary } from './portfolio-analytics.js';
+import { buildPortfolioHistory } from './portfolio-history.js';
+import { get52WeekRange } from './marketdata.js';
 import { computeHoldingSignals } from './signals.js';
 import { register, login, logout, requireAuth, AuthError } from './auth.js';
 
@@ -134,10 +136,30 @@ app.get('/api/indices', async (req, res) => {
   res.json(await computeIndices());
 });
 
+app.get('/api/stats/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  try {
+    const range52 = await get52WeekRange(symbol);
+    if (!range52) return res.status(404).json({ error: 'No range data' });
+    res.json(range52);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // --- Account-scoped routes (require login) ---
 
 app.get('/api/portfolio', requireAuth, async (req, res) => {
   res.json(await buildPortfolioSummary(req.account.id));
+});
+
+app.get('/api/portfolio/history', requireAuth, async (req, res) => {
+  const range = String(req.query.range || '3mo');
+  try {
+    res.json(await buildPortfolioHistory(req.account.id, range));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 app.get('/api/portfolio/signals', requireAuth, async (req, res) => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
+import { PanelError, SkeletonRows } from './Skeleton';
 
 const PAGE_SIZE = 15;
 
@@ -17,9 +18,20 @@ function formatVolume(value) {
   return String(value);
 }
 
-function MoversTable({ title, rows, onSelectSymbol }) {
+function MoversTable({ title, rows, loading, onSelectSymbol }) {
   const [page, setPage] = useState(0);
   useEffect(() => setPage(0), [rows]);
+
+  if (loading) {
+    return (
+      <div className="panel movers-table-panel">
+        <div className="movers-table-header">
+          <h3>{title}</h3>
+        </div>
+        <SkeletonRows rows={8} height={18} gap={10} />
+      </div>
+    );
+  }
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
@@ -44,7 +56,20 @@ function MoversTable({ title, rows, onSelectSymbol }) {
           </thead>
           <tbody>
             {pageRows.map((r) => (
-              <tr key={r.symbol} className="clickable-row" onClick={() => onSelectSymbol?.(r.symbol)}>
+              <tr
+                key={r.symbol}
+                className="clickable-row"
+                tabIndex={0}
+                role="button"
+                aria-label={`Open ${r.symbol} details and trade ticket`}
+                onClick={() => onSelectSymbol?.(r.symbol)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectSymbol?.(r.symbol);
+                  }
+                }}
+              >
                 <td className="symbol-cell">{r.symbol}</td>
                 <td>{formatCurrency(r.current)}</td>
                 <td className={r.percentChange >= 0 ? 'positive' : 'negative'}>{formatPercent(r.percentChange)}</td>
@@ -79,13 +104,21 @@ function MoversTable({ title, rows, onSelectSymbol }) {
 }
 
 export default function ActiveStocks({ onSelectSymbol }) {
-  const [movers, setMovers] = useState({ gainers: [], losers: [] });
+  const [movers, setMovers] = useState(null);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     function load() {
-      api.movers().then((data) => !cancelled && setMovers(data)).catch((err) => !cancelled && setError(err.message));
+      api
+        .movers()
+        .then((data) => {
+          if (cancelled) return;
+          setMovers(data);
+          setError('');
+        })
+        .catch((err) => !cancelled && setError(err.message));
     }
     load();
     const interval = setInterval(load, 60000);
@@ -93,16 +126,37 @@ export default function ActiveStocks({ onSelectSymbol }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [reloadKey]);
 
-  if (error) return null;
+  if (error && !movers) {
+    return (
+      <div>
+        <h3 className="subsection-title">Active Stocks</h3>
+        <div className="panel">
+          <PanelError message={error} onRetry={() => setReloadKey((k) => k + 1)} />
+        </div>
+      </div>
+    );
+  }
+
+  const loading = !movers;
 
   return (
     <div>
-      <h3 className="section-title">Active Stocks</h3>
+      <h3 className="subsection-title">Active Stocks</h3>
       <div className="active-stocks-grid">
-        <MoversTable title="Biggest Gainers" rows={movers.gainers} onSelectSymbol={onSelectSymbol} />
-        <MoversTable title="Biggest Losers" rows={movers.losers} onSelectSymbol={onSelectSymbol} />
+        <MoversTable
+          title="Biggest Gainers"
+          rows={movers?.gainers || []}
+          loading={loading}
+          onSelectSymbol={onSelectSymbol}
+        />
+        <MoversTable
+          title="Biggest Losers"
+          rows={movers?.losers || []}
+          loading={loading}
+          onSelectSymbol={onSelectSymbol}
+        />
       </div>
     </div>
   );

@@ -44,7 +44,7 @@ export async function mapLimit(items, limit, fn) {
 // separate OS processes making the same requests never would - so unlike mapLimit (which only
 // bounds concurrency *within* one call site), this is meant to be shared as a single global gate
 // in front of a given remote host, regardless of which code path is calling it.
-export function createSemaphore(limit) {
+export function createSemaphore(limit, watchdogMs = 20000) {
   let active = 0;
   const queue = [];
 
@@ -61,11 +61,28 @@ export function createSemaphore(limit) {
     } else {
       active++;
     }
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      active--;
+      next();
+    };
+    // fetchWithTimeout's AbortSignal is supposed to guarantee every call here settles within
+    // seconds, but in practice a handful of calls have hung past it entirely (observed twice:
+    // the entire gate stayed locked for 30+ minutes with nothing ever running again). Since
+    // this gate is shared app-wide, one such call otherwise wedges every future caller
+    // permanently. This watchdog frees the slot for others regardless - it can't cancel the
+    // stuck call itself, but it stops one bad call from taking the whole app down with it.
+    const watchdog = setTimeout(() => {
+      console.error('[semaphore] permit held past watchdog limit - force-releasing');
+      release();
+    }, watchdogMs);
     try {
       return await fn();
     } finally {
-      active--;
-      next();
+      clearTimeout(watchdog);
+      release();
     }
   };
 }

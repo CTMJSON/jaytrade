@@ -24,8 +24,21 @@ export default function MoversTicker({ onSelectSymbol }) {
     };
   }, []);
 
-  if (error) return null;
-  if (!movers) return null;
+  if (error && !movers) {
+    return (
+      <div className="ticker-wrap ticker-placeholder">
+        <span className="ticker-placeholder-text">Live market data unavailable right now</span>
+      </div>
+    );
+  }
+
+  if (!movers) {
+    return (
+      <div className="ticker-wrap ticker-placeholder">
+        <span className="ticker-placeholder-text">Loading market movers…</span>
+      </div>
+    );
+  }
 
   const items = [...movers.gainers.slice(0, 8), ...movers.losers.slice(0, 8)];
   if (items.length === 0) return null;
@@ -43,7 +56,10 @@ export default function MoversTicker({ onSelectSymbol }) {
             >
               <span className="ticker-symbol">{m.symbol}</span>
               <span>{formatCurrency(m.current)}</span>
-              <span>{formatPercent(m.percentChange)}</span>
+              <span>
+                <span className="delta-arrow" aria-hidden="true">{isGain ? '▲' : '▼'}</span>
+                {formatPercent(m.percentChange)}
+              </span>
             </button>
           );
         })}

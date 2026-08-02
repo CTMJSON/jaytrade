@@ -6,19 +6,24 @@ A paper-trading stock market simulator with a live, dark trading-terminal UI. Tr
 
 ### Trading
 - Live search and quotes for real-world traded companies
-- Buy/sell trading priced against the live market at the moment of execution
+- **Symbol drawer** — clicking any ticker anywhere in the app (ticker strip, market list, holdings, movers tables, search) opens a slide-over with the quote, a timeframed chart, the 52-week range, analyst consensus, your existing position in that name, and the trade ticket
+- Buy/sell trading priced against the live market at the moment of execution, with an inline confirmation step showing cost and remaining cash, and a toast receipt on fill
+- Quick position sizing (25% / 50% / Max of buying power, or your whole position when selling)
+- **⌘K command palette** — jump to any holding, search any ticker, or scroll to any section
 - Full trade history
 
 ### Market data & discovery
-- **Market Summary** — a symbol list plus a big interactive intraday chart (5-day, 15-minute bars) with a moving-average overlay and a ticker search box
+- **Market Summary** — a symbol list plus a big interactive chart with selectable timeframes (1D / 1W / 1M / 3M / 1Y), a moving-average overlay, and a ticker search box
 - **Markets (5-Day)** — index-tracking sparkline charts for the Dow, Nasdaq, S&P 500, and Russell 2000
 - **Active Stocks** — paginated Biggest Gainers / Biggest Losers tables across a curated watchlist, with price, change, volume, relative volume, float, and market cap
 - A scrolling movers ticker across the top of the app
 - Per-stock analyst buy/hold/sell consensus
 
 ### Portfolio intelligence
+The **Portfolio Value** chart plots your account's worth over time (1W / 1M / 3M / 1Y / all-time) with an optional S&P 500 overlay normalised to your starting value for the window — so "am I actually beating the market?" is answerable at a glance. The curve is reconstructed from your trade history against daily closes, so it has real depth the moment you open it rather than only accumulating going forward.
+
 The **Portfolio Summary** panel reads like an analyst's take on your holdings, not just a numbers dump:
-- Total value, all-time P/L, and today's move, each in dollars and percent
+- Total value, cash, invested, all-time P/L, and today's move, each in dollars and percent
 - Realized vs. unrealized P/L split — how much of your gain is actually locked in
 - Today's best/worst mover and best/worst performer since purchase
 - Win/loss count across open positions
@@ -33,6 +38,10 @@ The **Portfolio Summary** panel reads like an analyst's take on your holdings, n
 ## Design
 
 A dark, pro-trading-terminal aesthetic: near-black panels, a custom candlestick-mark logo, monospace numerics (JetBrains Mono) for all prices and P/L, gradient-filled charts, and motion (panel fade-ins, hover states) instead of a static dashboard.
+
+The page is ordered around the question a user actually arrives with — *how am I doing?* — so the portfolio comes first, market data second, automation and activity last, with a sticky header carrying live portfolio value and a sticky section nav. Prices flash green/red as they tick, gain/loss is carried by arrows as well as colour, every section has a loading skeleton and a visible retry rather than silently disappearing on upstream failure, and clickable table rows are keyboard reachable. Motion respects `prefers-reduced-motion`.
+
+See [`DESIGN-REVIEW.md`](DESIGN-REVIEW.md) for the full design critique this structure came out of, including the backlog of what's still open.
 
 ## Stack
 

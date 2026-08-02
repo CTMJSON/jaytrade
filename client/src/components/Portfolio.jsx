@@ -1,53 +1,63 @@
 import { formatCurrency, formatPercent, formatNumber } from '../format';
+import { SkeletonRows } from './Skeleton';
+
+function DeltaArrow({ value }) {
+  if (!value) return null;
+  return (
+    <span className="delta-arrow" aria-hidden="true">
+      {value > 0 ? '▲' : '▼'}
+    </span>
+  );
+}
 
 export default function Portfolio({ portfolio, onSelectSymbol }) {
-  if (!portfolio) return null;
+  if (!portfolio) {
+    return (
+      <div className="panel portfolio-panel">
+        <h3>Holdings</h3>
+        <SkeletonRows rows={4} height={20} />
+      </div>
+    );
+  }
 
-  const totalPLClass = portfolio.totalPL > 0 ? 'positive' : portfolio.totalPL < 0 ? 'negative' : '';
-
+  // Summary numbers now live solely in PortfolioSummary — showing Total Value
+  // and Total P/L in two places on one page made them read as different metrics.
   return (
     <div className="panel portfolio-panel">
-      <div className="summary-cards">
-        <div className="summary-card">
-          <span className="summary-label">Cash</span>
-          <span className="summary-value">{formatCurrency(portfolio.cash)}</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Holdings Value</span>
-          <span className="summary-value">{formatCurrency(portfolio.holdingsValue)}</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Total Value</span>
-          <span className="summary-value">{formatCurrency(portfolio.totalValue)}</span>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Total P/L</span>
-          <span className={`summary-value ${totalPLClass}`}>
-            {formatCurrency(portfolio.totalPL)} ({formatPercent(portfolio.totalPLPercent)})
-          </span>
-        </div>
-      </div>
-
       <h3>Holdings</h3>
       {portfolio.holdings.length === 0 ? (
-        <p className="empty-hint">No positions yet. Search for a stock to make your first trade.</p>
+        <p className="empty-hint">No positions yet. Search above to make your first trade.</p>
       ) : (
         <table className="holdings-table">
           <thead>
             <tr>
-              <th>Symbol</th>
-              <th>Qty</th>
-              <th>Bought → Now</th>
-              <th>Market Value</th>
-              <th>P/L</th>
+              <th scope="col">Symbol</th>
+              <th scope="col">Qty</th>
+              <th scope="col">Bought → Now</th>
+              <th scope="col">Market Value</th>
+              <th scope="col">P/L</th>
             </tr>
           </thead>
           <tbody>
             {portfolio.holdings.map((h) => {
               const plClass = h.unrealizedPL > 0 ? 'positive' : h.unrealizedPL < 0 ? 'negative' : '';
               const barPercent = Math.min(100, Math.abs(h.unrealizedPLPercent) * 4);
+              const open = () => onSelectSymbol(h.symbol);
               return (
-                <tr key={h.symbol} onClick={() => onSelectSymbol(h.symbol)} className="clickable-row">
+                <tr
+                  key={h.symbol}
+                  onClick={open}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      open();
+                    }
+                  }}
+                  className="clickable-row"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Open ${h.symbol} details and trade ticket`}
+                >
                   <td className="symbol-cell">{h.symbol}</td>
                   <td>{formatNumber(h.quantity, 0)}</td>
                   <td>
@@ -62,6 +72,7 @@ export default function Portfolio({ portfolio, onSelectSymbol }) {
                   </td>
                   <td>{formatCurrency(h.marketValue)}</td>
                   <td className={plClass}>
+                    <DeltaArrow value={h.unrealizedPL} />
                     {formatCurrency(h.unrealizedPL)} ({formatPercent(h.unrealizedPLPercent)})
                   </td>
                 </tr>

@@ -40,7 +40,36 @@ export async function getDailyHistory(symbol, range = '5d') {
       name: result.meta?.longName || result.meta?.shortName || symbol,
       currentPrice: result.meta?.regularMarketPrice,
       previousClose: result.meta?.chartPreviousClose,
+      fiftyTwoWeekHigh: result.meta?.fiftyTwoWeekHigh ?? null,
+      fiftyTwoWeekLow: result.meta?.fiftyTwoWeekLow ?? null,
       points,
+    };
+  });
+}
+
+/**
+ * 52-week high/low. Yahoo's chart meta usually carries these directly, but it isn't a
+ * documented API, so fall back to deriving them from a year of daily closes. The derived
+ * numbers are close-based (not intraday extremes), which is why `basis` is reported.
+ */
+export async function get52WeekRange(symbol) {
+  return cached(`range52:${symbol}`, 6 * 60 * 60 * 1000, async () => {
+    const history = await getDailyHistory(symbol, '1y');
+    const closes = history.points.map((p) => p.close).filter((c) => Number.isFinite(c));
+
+    const metaHigh = Number.isFinite(history.fiftyTwoWeekHigh) ? history.fiftyTwoWeekHigh : null;
+    const metaLow = Number.isFinite(history.fiftyTwoWeekLow) ? history.fiftyTwoWeekLow : null;
+    if (metaHigh != null && metaLow != null && metaHigh > metaLow) {
+      return { symbol, high: metaHigh, low: metaLow, current: history.currentPrice ?? null, basis: 'intraday' };
+    }
+
+    if (closes.length < 2) return null;
+    return {
+      symbol,
+      high: Math.max(...closes),
+      low: Math.min(...closes),
+      current: history.currentPrice ?? closes[closes.length - 1],
+      basis: 'close',
     };
   });
 }

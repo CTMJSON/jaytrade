@@ -2,11 +2,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { Area, ComposedChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line } from 'recharts';
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
+import { PanelError, Skeleton } from './Skeleton';
+import TimeframeToggle, { CHART_TIMEFRAMES } from './TimeframeToggle';
+import { useFlash } from '../useFlash';
 
 const DEFAULT_SYMBOLS = ['AAPL', 'MSFT', 'AMZN', 'NVDA', 'META', 'TSLA', 'GOOGL', 'AMD', 'SPY', 'QQQ'];
 const SMA_WINDOW = 10;
 const GREEN = '#00e676';
 const RED = '#ff3b5c';
+// Matches what the server cache warmer keeps hot, so the default view is instant.
+const DEFAULT_TIMEFRAME = CHART_TIMEFRAMES[1]; // 1W
 
 function withMovingAverage(points) {
   return points.map((p, i) => {
@@ -17,11 +22,18 @@ function withMovingAverage(points) {
   });
 }
 
-function formatTick(time) {
-  const d = new Date(time);
-  const hh = d.getHours() % 12 || 12;
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}`;
+// Intraday ranges want a clock; multi-month ranges want a date. Showing both at 1Y
+// produced unreadable axis labels.
+function makeTickFormatter(rangeKey) {
+  return function formatTick(time) {
+    const d = new Date(time);
+    const hh = d.getHours() % 12 || 12;
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    if (rangeKey === '1D') return `${hh}:${mm}`;
+    if (rangeKey === '1W' || rangeKey === '1M') return `${d.getMonth() + 1}/${d.getDate()}`;
+    if (rangeKey === '1Y') return `${d.getMonth() + 1}/${String(d.getFullYear()).slice(2)}`;
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  };
 }
 
 export default function MarketSummary({ onSelectSymbol }) {
@@ -31,6 +43,8 @@ export default function MarketSummary({ onSelectSymbol }) {
   const [chart, setChart] = useState(null);
   const [searchInput, setSearchInput] = useState('');
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
 
   useEffect(() => {
     api
@@ -53,8 +67,9 @@ export default function MarketSummary({ onSelectSymbol }) {
   useEffect(() => {
     let cancelled = false;
     setError('');
+    setChart(null);
     api
-      .history(selected)
+      .history(selected, timeframe.range, timeframe.interval)
       .then((data) => {
         if (cancelled) return;
         setChart({ ...data, points: withMovingAverage(data.points) });
@@ -63,7 +78,7 @@ export default function MarketSummary({ onSelectSymbol }) {
     return () => {
       cancelled = true;
     };
-  }, [selected]);
+  }, [selected, reloadKey, timeframe.range, timeframe.interval]);
 
   const priceChange = useMemo(() => {
     if (!chart || !chart.points.length) return null;
@@ -87,6 +102,8 @@ export default function MarketSummary({ onSelectSymbol }) {
 
   const isGain = priceChange ? priceChange.percent >= 0 : true;
   const lineColor = isGain ? GREEN : RED;
+  const formatTick = makeTickFormatter(timeframe.key);
+  const priceFlash = useFlash(priceChange?.last);
 
   return (
     <div className="panel market-summary">
@@ -108,7 +125,16 @@ export default function MarketSummary({ onSelectSymbol }) {
                 <tr
                   key={symbol}
                   className={selected === symbol ? 'symbol-row selected' : 'symbol-row'}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Open ${symbol} details and trade ticket`}
                   onClick={() => handleSelect(symbol)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleSelect(symbol);
+                    }
+                  }}
                 >
                   <td className="symbol-cell">{symbol}</td>
                   <td>{q ? formatCurrency(q.current) : '—'}</td>
@@ -124,7 +150,8 @@ export default function MarketSummary({ onSelectSymbol }) {
             <div className="chart-title">
               <span className="chart-symbol">{selected}</span>
               {priceChange && (
-                <span className={isGain ? 'positive' : 'negative'}>
+                <span className={`${isGain ? 'positive' : 'negative'} ${priceFlash}`}>
+                  <span className="delta-arrow" aria-hidden="true">{isGain ? '▲' : '▼'}</span>
                   {formatCurrency(priceChange.last)} ({formatPercent(priceChange.percent)})
                 </span>
               )}
@@ -139,7 +166,24 @@ export default function MarketSummary({ onSelectSymbol }) {
             </form>
           </div>
 
-          {error && <p className="error-text">{error}</p>}
+          <div className="chart-toolbar">
+            <TimeframeToggle
+              options={CHART_TIMEFRAMES}
+              value={timeframe.key}
+              onChange={setTimeframe}
+              label="Chart time range"
+            />
+          </div>
+
+          {error && (
+            <PanelError message={error} compact onRetry={() => setReloadKey((k) => k + 1)} />
+          )}
+
+          {!chart && !error && (
+            <div className="chart-skeleton">
+              <Skeleton height={280} radius={8} />
+            </div>
+          )}
 
           {chart && (
             <ResponsiveContainer width="100%" height={280}>

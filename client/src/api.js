@@ -62,6 +62,8 @@ export const api = {
   history: (symbol, range = '5d', interval = '15m') =>
     request(`/history/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`),
   portfolioSignals: () => request('/portfolio/signals'),
+  portfolioHistory: (range = '3mo') => request(`/portfolio/history?range=${encodeURIComponent(range)}`),
+  stats: (symbol) => request(`/stats/${encodeURIComponent(symbol)}`),
 };
 
 export const auth = {

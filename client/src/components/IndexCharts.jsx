@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ComposedChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
+import { PanelError, Skeleton } from './Skeleton';
 
 const GREEN = '#00e676';
 const RED = '#ff3b5c';
@@ -9,13 +10,17 @@ const RED = '#ff3b5c';
 export default function IndexCharts() {
   const [indices, setIndices] = useState([]);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
         const data = await api.indices();
-        if (!cancelled) setIndices(data);
+        if (!cancelled) {
+          setIndices(data);
+          setError('');
+        }
       } catch (err) {
         if (!cancelled) setError(err.message);
       }
@@ -26,10 +31,34 @@ export default function IndexCharts() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, []);
+  }, [reloadKey]);
 
-  if (error) return null;
-  if (indices.length === 0) return null;
+  // A section the user has already seen must never silently vanish.
+  if (error && indices.length === 0) {
+    return (
+      <div className="panel index-panel">
+        <h3>Markets (5-Day)</h3>
+        <PanelError message={error} onRetry={() => setReloadKey((k) => k + 1)} />
+      </div>
+    );
+  }
+
+  if (indices.length === 0) {
+    return (
+      <div className="panel index-panel">
+        <h3>Markets (5-Day)</h3>
+        <div className="index-grid">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} className="index-card">
+              <Skeleton width="55%" height={11} />
+              <Skeleton width="75%" height={16} />
+              <Skeleton height={60} radius={8} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="panel index-panel">

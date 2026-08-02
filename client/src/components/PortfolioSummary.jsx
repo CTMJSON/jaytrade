@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
+import { SkeletonCards } from './Skeleton';
+
+const STARTER_IDEAS = ['AAPL', 'MSFT', 'NVDA', 'SPY'];
 
 const ALLOCATION_COLORS = ['#004080', '#00c853', '#0077cc', '#66bb6a', '#f0a500', '#8e6fce', '#e57373', '#26a69a'];
 const CONCENTRATION_THRESHOLD = 25;
@@ -8,6 +11,16 @@ const CASH_DRAG_THRESHOLD = 50;
 
 function pctClass(value) {
   return value > 0 ? 'positive' : value < 0 ? 'negative' : '';
+}
+
+// Colour alone can't carry gain/loss meaning — add a shape cue.
+function Delta({ value }) {
+  if (!value) return null;
+  return (
+    <span className="delta-arrow" aria-hidden="true">
+      {value > 0 ? '▲' : '▼'}
+    </span>
+  );
 }
 
 function useOrders(refreshKey) {
@@ -56,17 +69,29 @@ const ACTION_CLASS = {
   REVIEW: 'ps-action-review',
 };
 
+const RECOMMENDATION_CONCURRENCY = 3;
+
 function useRecommendations(symbols) {
   const [recs, setRecs] = useState({});
   useEffect(() => {
     let cancelled = false;
-    symbols.forEach((symbol) => {
-      if (recs[symbol] !== undefined) return;
-      api
-        .recommendation(symbol)
-        .then((data) => !cancelled && setRecs((prev) => ({ ...prev, [symbol]: data })))
-        .catch(() => !cancelled && setRecs((prev) => ({ ...prev, [symbol]: null })));
-    });
+    const pending = symbols.filter((symbol) => recs[symbol] === undefined);
+    // A portfolio with a dozen holdings firing a dozen simultaneous recommendation
+    // requests (times every logged-in account) is what pushed Finnhub past its 60/min
+    // limit and surfaced as 502s. A small concurrency cap smooths that burst out.
+    let next = 0;
+    async function worker() {
+      while (!cancelled && next < pending.length) {
+        const symbol = pending[next++];
+        try {
+          const data = await api.recommendation(symbol);
+          if (!cancelled) setRecs((prev) => ({ ...prev, [symbol]: data }));
+        } catch {
+          if (!cancelled) setRecs((prev) => ({ ...prev, [symbol]: null }));
+        }
+      }
+    }
+    Array.from({ length: Math.min(RECOMMENDATION_CONCURRENCY, pending.length) }, worker);
     return () => {
       cancelled = true;
     };
@@ -81,7 +106,43 @@ export default function PortfolioSummary({ portfolio, onSelectSymbol }) {
   const recs = useRecommendations(symbols);
   const signals = useSignals(symbols.join(','));
 
-  if (!portfolio || portfolio.holdings.length === 0) return null;
+  if (!portfolio) {
+    return (
+      <div className="panel portfolio-summary-panel">
+        <h3>Portfolio Summary</h3>
+        <SkeletonCards count={6} />
+      </div>
+    );
+  }
+
+  // Previously this returned null, so a brand-new account saw no personalized
+  // content at all. Now it's the onboarding moment instead.
+  if (portfolio.holdings.length === 0) {
+    return (
+      <div className="panel portfolio-summary-panel ps-empty">
+        <h3>Welcome to JayTrade</h3>
+        <p className="ps-empty-lead">
+          You have <strong>{formatCurrency(portfolio.cash)}</strong> in simulated cash. Nothing is
+          real, nothing is at risk — buy something and see what happens.
+        </p>
+        <ol className="ps-empty-steps">
+          <li>Search for a company using the bar above.</li>
+          <li>Review the price, chart, and analyst consensus.</li>
+          <li>Place a buy — your position and P/L show up right here.</li>
+        </ol>
+        <div className="ps-empty-ideas">
+          <span className="ps-allocation-label">Popular starting points</span>
+          <div className="ps-empty-chips">
+            {STARTER_IDEAS.map((symbol) => (
+              <button key={symbol} className="ps-empty-chip" onClick={() => onSelectSymbol?.(symbol)}>
+                {symbol}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const { holdings, totalValue, totalPL, totalPLPercent, dayChange, dayChangePercent, realizedPL, unrealizedPL } = portfolio;
 
@@ -145,16 +206,26 @@ export default function PortfolioSummary({ portfolio, onSelectSymbol }) {
           <span className="ps-stat-value">{formatCurrency(totalValue)}</span>
         </div>
         <div className="ps-stat">
+          <span className="ps-stat-label">Today</span>
+          <span className={`ps-stat-value ${pctClass(dayChange)}`}>
+            <Delta value={dayChange} />
+            {formatCurrency(dayChange)} ({formatPercent(dayChangePercent)})
+          </span>
+        </div>
+        <div className="ps-stat">
           <span className="ps-stat-label">Total P/L (all-time)</span>
           <span className={`ps-stat-value ${pctClass(totalPL)}`}>
+            <Delta value={totalPL} />
             {formatCurrency(totalPL)} ({formatPercent(totalPLPercent)})
           </span>
         </div>
         <div className="ps-stat">
-          <span className="ps-stat-label">Today</span>
-          <span className={`ps-stat-value ${pctClass(dayChange)}`}>
-            {formatCurrency(dayChange)} ({formatPercent(dayChangePercent)})
-          </span>
+          <span className="ps-stat-label">Cash</span>
+          <span className="ps-stat-value">{formatCurrency(portfolio.cash)}</span>
+        </div>
+        <div className="ps-stat">
+          <span className="ps-stat-label">Invested</span>
+          <span className="ps-stat-value">{formatCurrency(portfolio.holdingsValue)}</span>
         </div>
         <div className="ps-stat">
           <span className="ps-stat-label">Win / Loss</span>
