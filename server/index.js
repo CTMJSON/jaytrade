@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import dns from 'node:dns';
+import { Agent, setGlobalDispatcher } from 'undici';
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
@@ -8,8 +9,13 @@ import db from './db.js';
 
 // Some networks have a dead/blackholed IPv6 route that doesn't reject fast (unlike IPv4
 // refusals), so undici's happy-eyeballs can hang on it until timeout before falling back.
-// Preferring IPv4 first avoids that stall entirely for hosts that support both.
+// 'ipv4first' only reorders results when a lookup returns both families, though - on this
+// network, plain DNS lookups for query2.finance.yahoo.com return an AAAA record only (no A
+// record at all), so there's nothing to reorder and undici commits to the dead IPv6 route
+// every time. Forcing IPv4-only resolution at the dispatcher level (like `curl -4` does,
+// which works instantly here) sidesteps that entirely instead of just biasing the order.
 dns.setDefaultResultOrder('ipv4first');
+setGlobalDispatcher(new Agent({ connect: { family: 4 } }));
 import { searchSymbols, getQuote, getProfile, getRecommendationTrends } from './finnhub.js';
 import { executeTrade, TradeError } from './trading.js';
 import { createOrder, listOrders, cancelOrder, checkAndExecuteOrders } from './orders.js';
