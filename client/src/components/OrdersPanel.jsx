@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { formatCurrency, formatNumber } from '../format';
+import { formatCurrency, formatNumber, formatDateTime } from '../format';
 
 const ROLE_LABELS = {
   STOP_LOSS: 'Stop-Loss',
@@ -166,6 +166,7 @@ export default function OrdersPanel({ defaultSymbol }) {
                   <td className={o.side === 'BUY' ? 'positive' : 'negative'}>{o.side}</td>
                   <td>{o.status}</td>
                   <td>{o.note || '-'}</td>
+                  <td className="order-timestamp">{formatDateTime(o.executed_at || o.created_at)}</td>
                 </tr>
               ))}
             </tbody>
