@@ -4,6 +4,7 @@ import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
 import TimeframeToggle, { EQUITY_TIMEFRAMES } from './TimeframeToggle';
 import { PanelError, Skeleton } from './Skeleton';
+import InfoTip from './InfoTip';
 
 const GREEN = '#00e676';
 const RED = '#ff3b5c';
@@ -156,14 +157,22 @@ export default function EquityCurve({ refreshKey }) {
           </ResponsiveContainer>
 
           <div className="equity-footer">
-            <label className="equity-benchmark-toggle">
-              <input
-                type="checkbox"
-                checked={showBenchmark}
-                onChange={(e) => setShowBenchmark(e.target.checked)}
-              />
-              Compare to {data.benchmarkSymbol}
-            </label>
+            <span className="equity-benchmark-group">
+              <label className="equity-benchmark-toggle">
+                <input
+                  type="checkbox"
+                  checked={showBenchmark}
+                  onChange={(e) => setShowBenchmark(e.target.checked)}
+                />
+                Compare to {data.benchmarkSymbol}
+              </label>
+              <InfoTip label="About the SPY comparison">
+                {data.benchmarkSymbol} tracks the S&amp;P 500 — roughly what your money would be
+                doing if you'd just bought a broad index fund instead of picking stocks yourself.
+                This overlays that comparison on your own portfolio curve so you can see whether
+                your picks are actually beating the market.
+              </InfoTip>
+            </span>
 
             {beatBenchmark != null && (
               <span className="equity-verdict">

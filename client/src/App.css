@@ -787,6 +787,91 @@ h1, h2, h3, h4 {
   white-space: nowrap;
 }
 
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  margin-left: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color-strong);
+  color: var(--text-dim);
+  font-family: 'Open Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  cursor: help;
+  vertical-align: middle;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.info-tip:hover,
+.info-tip:focus {
+  border-color: var(--primary-blue);
+  color: var(--primary-blue);
+}
+
+.info-tip-icon {
+  pointer-events: none;
+}
+
+.info-tip-bubble {
+  position: absolute;
+  bottom: calc(100% + 9px);
+  width: 250px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-color-strong);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  text-align: left;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 60;
+  pointer-events: none;
+}
+
+.info-tip-align-center {
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+}
+
+.info-tip-align-left {
+  left: 0;
+}
+
+.info-tip-align-right {
+  right: 0;
+}
+
+.info-tip:hover .info-tip-bubble,
+.info-tip:focus .info-tip-bubble {
+  opacity: 1;
+  visibility: visible;
+}
+
+.info-tip:hover .info-tip-bubble.info-tip-align-center,
+.info-tip:focus .info-tip-bubble.info-tip-align-center {
+  transform: translateX(-50%) translateY(0);
+}
+
+.info-tip:hover .info-tip-bubble.info-tip-align-left,
+.info-tip:focus .info-tip-bubble.info-tip-align-left,
+.info-tip:hover .info-tip-bubble.info-tip-align-right,
+.info-tip:focus .info-tip-bubble.info-tip-align-right {
+  transform: translateY(0);
+}
+
 .cost-compare {
   display: flex;
   align-items: baseline;
@@ -2314,6 +2399,11 @@ a:focus-visible {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border-color);
+}
+
+.equity-benchmark-group {
+  display: flex;
+  align-items: center;
 }
 
 .equity-benchmark-toggle {

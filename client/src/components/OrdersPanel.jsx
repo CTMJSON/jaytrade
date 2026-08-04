@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { formatCurrency, formatNumber, formatDateTime } from '../format';
+import InfoTip from './InfoTip';
 
 const ROLE_LABELS = {
   STOP_LOSS: 'Stop-Loss',
@@ -72,7 +73,18 @@ export default function OrdersPanel({ defaultSymbol }) {
 
   return (
     <div className="panel orders-panel">
-      <h3>Automated Buy/Sell Triggers</h3>
+      <h3>
+        Automated Buy/Sell Triggers
+        <InfoTip label="About automated triggers" align="left">
+          Every time you buy a stock, four triggers are created automatically off your fill
+          price: a <strong>Stop-Loss</strong> (sells the full position if it drops too far), a{' '}
+          <strong>Trim Target</strong> (banks ~25% of the position if it rises), a{' '}
+          <strong>Dip-Buy</strong> (adds more if it dips further, once per 30 days), and a{' '}
+          <strong>Breakout-Buy</strong> (adds more on continued strength — only arms after a
+          trim fires). You can also add your own custom triggers below, labeled{' '}
+          <em>Manual</em> — those are never touched by the automation.
+        </InfoTip>
+      </h3>
       <form className="order-form" onSubmit={handleSubmit}>
         <input
           type="text"

@@ -3,6 +3,7 @@ import { Area, ComposedChart, XAxis, YAxis, Tooltip, ResponsiveContainer, Cartes
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
 import { PanelError, Skeleton } from './Skeleton';
+import InfoTip from './InfoTip';
 import TimeframeToggle, { CHART_TIMEFRAMES } from './TimeframeToggle';
 import { useFlash } from '../useFlash';
 
@@ -107,7 +108,15 @@ export default function MarketSummary({ onSelectSymbol }) {
 
   return (
     <div className="panel market-summary">
-      <h3>Market Summary</h3>
+      <h3>
+        Market Summary
+        <InfoTip label="How to read this panel" align="left">
+          The list on the left shows live quotes for popular symbols — click one to load its
+          chart, or type any ticker in the search box and press Enter. <strong>% Change</strong>{' '}
+          is versus the previous market close. The chart's dashed line is a 10-period moving
+          average, useful for spotting the underlying trend through the day-to-day noise.
+        </InfoTip>
+      </h3>
       <div className="market-summary-grid">
         <table className="symbol-list-table">
           <thead>

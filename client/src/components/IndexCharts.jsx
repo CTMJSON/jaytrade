@@ -3,6 +3,7 @@ import { ComposedChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'rechar
 import { api } from '../api';
 import { formatCurrency, formatPercent } from '../format';
 import { PanelError, Skeleton } from './Skeleton';
+import InfoTip from './InfoTip';
 
 const GREEN = '#00e676';
 const RED = '#ff3b5c';
@@ -37,7 +38,16 @@ export default function IndexCharts() {
   if (error && indices.length === 0) {
     return (
       <div className="panel index-panel">
-        <h3>Markets (5-Day)</h3>
+        <h3>
+          Markets (5-Day)
+          <InfoTip label="About these index charts">
+            These track the broad market via ETFs that mirror major indices:{' '}
+            <strong>SPY</strong> (S&amp;P 500), <strong>QQQ</strong> (Nasdaq 100),{' '}
+            <strong>DIA</strong> (Dow Jones), and <strong>IWM</strong> (Russell 2000). SPY is
+            the most common stand-in for "the market" as a whole — if your portfolio is beating
+            it, you're outperforming a simple index fund.
+          </InfoTip>
+        </h3>
         <PanelError message={error} onRetry={() => setReloadKey((k) => k + 1)} />
       </div>
     );
@@ -46,7 +56,16 @@ export default function IndexCharts() {
   if (indices.length === 0) {
     return (
       <div className="panel index-panel">
-        <h3>Markets (5-Day)</h3>
+        <h3>
+          Markets (5-Day)
+          <InfoTip label="About these index charts">
+            These track the broad market via ETFs that mirror major indices:{' '}
+            <strong>SPY</strong> (S&amp;P 500), <strong>QQQ</strong> (Nasdaq 100),{' '}
+            <strong>DIA</strong> (Dow Jones), and <strong>IWM</strong> (Russell 2000). SPY is
+            the most common stand-in for "the market" as a whole — if your portfolio is beating
+            it, you're outperforming a simple index fund.
+          </InfoTip>
+        </h3>
         <div className="index-grid">
           {Array.from({ length: 4 }, (_, i) => (
             <div key={i} className="index-card">
