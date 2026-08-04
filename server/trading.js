@@ -1,8 +1,9 @@
 import db from './db.js';
+import { generateTriggerSet } from './auto-triggers.js';
 
 export class TradeError extends Error {}
 
-export function executeTrade(accountId, symbol, side, qty, price, source = 'MANUAL') {
+export function executeTrade(accountId, symbol, side, qty, price, source = 'MANUAL', triggerRole = null) {
   const total = price * qty;
   const account = db.prepare('SELECT cash FROM accounts WHERE id = ?').get(accountId);
   const holding = db.prepare('SELECT * FROM holdings WHERE account_id = ? AND symbol = ?').get(accountId, symbol);
@@ -24,8 +25,8 @@ export function executeTrade(accountId, symbol, side, qty, price, source = 'MANU
           accountId, symbol, qty, price
         );
       }
-      db.prepare('INSERT INTO trades (account_id, symbol, side, quantity, price, total, source) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-        accountId, symbol, 'BUY', qty, price, total, source
+      db.prepare('INSERT INTO trades (account_id, symbol, side, quantity, price, total, source, trigger_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+        accountId, symbol, 'BUY', qty, price, total, source, triggerRole
       );
       db.exec('COMMIT');
     } catch (err) {
@@ -46,14 +47,23 @@ export function executeTrade(accountId, symbol, side, qty, price, source = 'MANU
       } else {
         db.prepare('UPDATE holdings SET quantity = ? WHERE account_id = ? AND symbol = ?').run(newQty, accountId, symbol);
       }
-      db.prepare('INSERT INTO trades (account_id, symbol, side, quantity, price, total, source) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-        accountId, symbol, 'SELL', qty, price, total, source
+      db.prepare('INSERT INTO trades (account_id, symbol, side, quantity, price, total, source, trigger_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+        accountId, symbol, 'SELL', qty, price, total, source, triggerRole
       );
       db.exec('COMMIT');
     } catch (err) {
       db.exec('ROLLBACK');
       throw err;
     }
+  }
+
+  // Auto-trigger bracket regeneration only ever runs off a MANUAL fill (not an AUTO one - those
+  // get their own narrower recompute in orders.js) - this is what makes "any manual buy/sell
+  // regenerates the bracket from the new position state" true regardless of which route/UI
+  // triggered the trade. Runs after commit since generateTriggerSet does its own writes and
+  // this codebase's DB layer doesn't support nested transactions.
+  if (source === 'MANUAL') {
+    generateTriggerSet(accountId, symbol);
   }
 
   return { symbol, side, quantity: qty, price, total };

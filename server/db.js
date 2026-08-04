@@ -148,4 +148,23 @@ db.exec(`
   );
 `);
 
+// Auto-trigger support: which strategy role an order/fill belongs to, plus an armed flag so
+// a breakout-buy can exist but stay inert until a trim fires. Added via ALTER rather than in
+// the CREATE TABLE above so existing rows on already-deployed databases pick them up too.
+const ordersColumns = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+if (!ordersColumns.includes('role')) {
+  db.exec("ALTER TABLE orders ADD COLUMN role TEXT NOT NULL DEFAULT 'MANUAL'");
+}
+if (!ordersColumns.includes('tier')) {
+  db.exec('ALTER TABLE orders ADD COLUMN tier TEXT');
+}
+if (!ordersColumns.includes('armed')) {
+  db.exec('ALTER TABLE orders ADD COLUMN armed INTEGER NOT NULL DEFAULT 1');
+}
+
+const tradesColumns = db.prepare('PRAGMA table_info(trades)').all().map((c) => c.name);
+if (!tradesColumns.includes('trigger_role')) {
+  db.exec('ALTER TABLE trades ADD COLUMN trigger_role TEXT');
+}
+
 export default db;

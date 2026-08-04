@@ -2,6 +2,13 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { formatCurrency, formatNumber } from '../format';
 
+const ROLE_LABELS = {
+  STOP_LOSS: 'Stop-Loss',
+  TRIM_TARGET: 'Trim Target',
+  DIP_BUY: 'Dip-Buy',
+  BREAKOUT_BUY: 'Breakout-Buy',
+};
+
 const emptyForm = {
   symbol: '',
   side: 'BUY',
@@ -120,8 +127,18 @@ export default function OrdersPanel({ defaultSymbol }) {
               {activeOrders.map((o) => (
                 <tr key={o.id}>
                   <td className="symbol-cell">{o.symbol}</td>
+                  <td>
+                    {o.role && o.role !== 'MANUAL' ? (
+                      <span className="auto-trigger-badge">{ROLE_LABELS[o.role] || o.role}</span>
+                    ) : (
+                      <span className="manual-trigger-label">Manual</span>
+                    )}
+                  </td>
                   <td className={o.side === 'BUY' ? 'positive' : 'negative'}>{o.side}</td>
-                  <td>{o.condition === 'DROPS_BELOW' ? 'drops below' : 'rises above'} {formatCurrency(o.trigger_price)}</td>
+                  <td>
+                    {o.condition === 'DROPS_BELOW' ? 'drops below' : 'rises above'} {formatCurrency(o.trigger_price)}
+                    {!o.armed && <span className="unarmed-note"> (arms after trim)</span>}
+                  </td>
                   <td>{o.side === 'BUY' ? `up to ${formatCurrency(o.amount_usd)}` : (o.quantity ? `${formatNumber(o.quantity, 0)} sh` : 'all shares')}</td>
                   <td><button className="cancel-button" onClick={() => handleCancel(o.id)}>Cancel</button></td>
                 </tr>
@@ -139,6 +156,13 @@ export default function OrdersPanel({ defaultSymbol }) {
               {pastOrders.map((o) => (
                 <tr key={o.id}>
                   <td className="symbol-cell">{o.symbol}</td>
+                  <td>
+                    {o.role && o.role !== 'MANUAL' ? (
+                      <span className="auto-trigger-badge">{ROLE_LABELS[o.role] || o.role}</span>
+                    ) : (
+                      <span className="manual-trigger-label">Manual</span>
+                    )}
+                  </td>
                   <td className={o.side === 'BUY' ? 'positive' : 'negative'}>{o.side}</td>
                   <td>{o.status}</td>
                   <td>{o.note || '-'}</td>
