@@ -1,4 +1,4 @@
-import { cached } from './cache.js';
+import { cached, cachedWithMeta } from './cache.js';
 import { withRetry, fetchWithTimeout, createSemaphore } from './retry.js';
 
 const YAHOO_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
@@ -6,9 +6,15 @@ const YAHOO_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/53
 // On constrained/low-core hardware, concurrent TLS handshakes to the same host can genuinely
 // starve each other for CPU (crypto work competes for libuv's threadpool) badly enough that
 // some time out entirely - something separate OS processes making the same calls never hit,
-// since those get scheduled across cores independently. This gate serializes every Yahoo
-// fetch application-wide (movers/indices/history/warmer alike) so that never happens.
-const yahooGate = createSemaphore(1);
+// since those get scheduled across cores independently. This gate bounds concurrent Yahoo
+// fetches application-wide (movers/indices/history/warmer alike).
+//
+// This used to be limit(1), which fully serialized every Yahoo call app-wide - a single
+// background warm pass over 50+ symbols could then take tens of seconds, during which an
+// interactive, user-triggered request (e.g. opening a symbol's chart) would queue behind the
+// entire batch. 3 still bounds concurrent TLS handshakes on constrained hardware but no longer
+// turns the whole app into a single-file queue.
+const yahooGate = createSemaphore(3);
 
 async function fetchChart(symbol, range, interval) {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
@@ -16,8 +22,10 @@ async function fetchChart(symbol, range, interval) {
   // status is not retried since that indicates a real, non-transient response from Yahoo.
   // 'Connection: close' avoids reusing a pooled keep-alive socket that can go stale/dead
   // and then hang every subsequent request against it until the timeout fires.
-  const res = await yahooGate(() =>
-    withRetry(() => fetchWithTimeout(url, { headers: { 'User-Agent': YAHOO_UA, Connection: 'close' } }))
+  const res = await yahooGate((controller) =>
+    withRetry(() =>
+      fetchWithTimeout(url, { headers: { 'User-Agent': YAHOO_UA, Connection: 'close' }, signal: controller.signal })
+    )
   );
   if (!res.ok) throw new Error(`Yahoo chart failed for ${symbol}: ${res.status}`);
   const data = await res.json();
@@ -91,20 +99,31 @@ export async function getIntradayHistory(symbol, range = '5d', interval = '15m')
   };
 }
 
+const VOLUME_STATS_TTL_MS = 3 * 60 * 1000;
+
+async function computeVolumeStats(symbol) {
+  const result = await fetchChart(symbol, '5d', '1d');
+  const volumes = (result.indicators?.quote?.[0]?.volume || []).filter((v) => v != null);
+  if (volumes.length === 0) {
+    return { volume: result.meta?.regularMarketVolume ?? null, avgVolume: null, relativeVolume: null };
+  }
+  const today = volumes[volumes.length - 1];
+  const priorDays = volumes.slice(0, -1);
+  const avgVolume = priorDays.length ? priorDays.reduce((sum, v) => sum + v, 0) / priorDays.length : null;
+  return {
+    volume: result.meta?.regularMarketVolume ?? today,
+    avgVolume,
+    relativeVolume: avgVolume ? today / avgVolume : null,
+  };
+}
+
 export async function getVolumeStats(symbol) {
-  return cached(`volstats:${symbol}`, 3 * 60 * 1000, async () => {
-    const result = await fetchChart(symbol, '5d', '1d');
-    const volumes = (result.indicators?.quote?.[0]?.volume || []).filter((v) => v != null);
-    if (volumes.length === 0) {
-      return { volume: result.meta?.regularMarketVolume ?? null, avgVolume: null, relativeVolume: null };
-    }
-    const today = volumes[volumes.length - 1];
-    const priorDays = volumes.slice(0, -1);
-    const avgVolume = priorDays.length ? priorDays.reduce((sum, v) => sum + v, 0) / priorDays.length : null;
-    return {
-      volume: result.meta?.regularMarketVolume ?? today,
-      avgVolume,
-      relativeVolume: avgVolume ? today / avgVolume : null,
-    };
-  });
+  return cached(`volstats:${symbol}`, VOLUME_STATS_TTL_MS, () => computeVolumeStats(symbol));
+}
+
+/** Same as `getVolumeStats`, but also reports when this value was actually fetched. Volume/
+ * market-cap here are on a much slower cadence (minutes) than live price (seconds) - callers
+ * should present the two with separate "as of" labels rather than implying they're one instant. */
+export async function getVolumeStatsWithMeta(symbol) {
+  return cachedWithMeta(`volstats:${symbol}`, VOLUME_STATS_TTL_MS, () => computeVolumeStats(symbol));
 }
