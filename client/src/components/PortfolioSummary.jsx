@@ -213,7 +213,7 @@ export default function PortfolioSummary({ portfolio, onSelectSymbol }) {
           </span>
         </div>
         <div className="ps-stat">
-          <span className="ps-stat-label">Total P/L (all-time)</span>
+          <span className="ps-stat-label">Total Profit/Loss (all-time)</span>
           <span className={`ps-stat-value ${pctClass(totalPL)}`}>
             <Delta value={totalPL} />
             {formatCurrency(totalPL)} ({formatPercent(totalPLPercent)})
@@ -316,10 +316,10 @@ export default function PortfolioSummary({ portfolio, onSelectSymbol }) {
 
       {signals.length > 0 && (
         <div className="ps-signals">
-          <span className="ps-allocation-label">
-            Suggested Actions
-            <span className="ps-signals-disclaimer"> — simulated signal for this app, not real investment advice</span>
-          </span>
+          <span className="ps-allocation-label">Suggested Actions</span>
+          <div className="ps-signals-disclaimer">
+            Simulated signal for this app — not real investment advice.
+          </div>
           <div className="ps-signals-list">
             {signals.map((s) => (
               <div key={s.symbol} className="ps-signal-row">

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 const SECTIONS = [
   { id: 'portfolio', label: 'Portfolio' },
   { id: 'markets', label: 'Markets' },
-  { id: 'automation', label: 'Automation' },
+  { id: 'automation', label: 'Orders & Triggers' },
   { id: 'activity', label: 'Activity' },
 ];
 
