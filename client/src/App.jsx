@@ -116,6 +116,9 @@ function AppShell() {
         <div className="brand">
           <Logo size={36} />
           <h1>JayTrade</h1>
+          <span className="sim-badge" title="This is a paper-trading simulator — no real money or trades are involved">
+            Paper Trading Simulator
+          </span>
         </div>
 
         {portfolio && (
@@ -169,7 +172,8 @@ function AppShell() {
 
       {/* 3. Standing instructions. */}
       <section id="automation" className="app-section">
-        <h2 className="section-title">Automation</h2>
+        <h2 className="section-title">Orders &amp; Triggers</h2>
+        <p className="section-subtitle">Set price triggers to auto-buy or auto-sell when a stock hits your target price.</p>
         <OrdersPanel defaultSymbol={selectedSymbol} />
       </section>
 
