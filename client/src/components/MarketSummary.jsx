@@ -236,9 +236,10 @@ export default function MarketSummary({ onSelectSymbol }) {
                 <YAxis
                   domain={['auto', 'auto']}
                   tick={{ fontSize: 11, fill: '#8b93a3' }}
-                  width={60}
+                  width={68}
                   axisLine={{ stroke: '#232a38' }}
                   tickLine={{ stroke: '#232a38' }}
+                  label={{ value: 'Price (USD)', angle: -90, position: 'insideLeft', offset: 8, style: { fontSize: 10, fill: '#8b93a3' } }}
                 />
                 <Tooltip
                   labelFormatter={formatTick}
