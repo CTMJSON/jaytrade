@@ -29,3 +29,18 @@ export function formatPercent(value) {
   const sign = value > 0 ? '+' : '';
   return `${sign}${value.toFixed(2)}%`;
 }
+
+// Renders an `asOf`/`updatedAt` epoch-ms timestamp (as now threaded through /api/movers,
+// /api/quote, /api/indices, /api/history) as a short relative age, so mixed-freshness fields
+// (e.g. a 15s-fresh price next to a 3min-old volume figure) read as honestly-labeled instead of
+// implying everything on the page is one current instant.
+export function formatAge(asOfMs) {
+  if (!asOfMs) return null;
+  const seconds = Math.max(0, Math.round((Date.now() - asOfMs) / 1000));
+  if (seconds < 5) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  return `${hours}h ago`;
+}

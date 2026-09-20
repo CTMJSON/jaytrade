@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import { formatCurrency, formatPercent } from '../format';
+import { formatAge, formatCurrency, formatPercent } from '../format';
 import { PanelError, SkeletonRows } from './Skeleton';
+import { useLiveQuote, mergeLiveQuote } from '../store/useLiveQuote';
 
 const PAGE_SIZE = 15;
 
@@ -16,6 +17,44 @@ function formatVolume(value) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
   return String(value);
+}
+
+function MoverRow({ r, onSelectSymbol }) {
+  const live = useLiveQuote(r.symbol);
+  const row = mergeLiveQuote(r, live);
+  return (
+    <tr
+      className="clickable-row"
+      tabIndex={0}
+      role="button"
+      aria-label={`Open ${row.symbol} details and trade ticket`}
+      onClick={() => onSelectSymbol?.(row.symbol)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelectSymbol?.(row.symbol);
+        }
+      }}
+    >
+      <td className="symbol-cell">{row.symbol}</td>
+      <td>
+        {formatCurrency(row.current)}
+        {row.asOf && (
+          <span className="asof-hint" title={`Price as of ${formatAge(row.asOf)}${row.source === 'ws' ? ' (live)' : ''}`}>
+            {' '}
+            · {row.source === 'ws' ? 'live' : formatAge(row.asOf)}
+          </span>
+        )}
+      </td>
+      <td className={row.percentChange >= 0 ? 'positive' : 'negative'}>{formatPercent(row.percentChange)}</td>
+      <td title={row.volumeAsOf ? `Volume as of ${formatAge(row.volumeAsOf)}` : undefined}>
+        {formatVolume(row.volume)}
+      </td>
+      <td>{row.relativeVolume != null ? `${row.relativeVolume.toFixed(2)}x` : '—'}</td>
+      <td>{formatCompact(row.floatShares)}</td>
+      <td>{formatCompact(row.marketCap)}</td>
+    </tr>
+  );
 }
 
 function MoversTable({ title, rows, loading, onSelectSymbol }) {
@@ -56,28 +95,7 @@ function MoversTable({ title, rows, loading, onSelectSymbol }) {
           </thead>
           <tbody>
             {pageRows.map((r) => (
-              <tr
-                key={r.symbol}
-                className="clickable-row"
-                tabIndex={0}
-                role="button"
-                aria-label={`Open ${r.symbol} details and trade ticket`}
-                onClick={() => onSelectSymbol?.(r.symbol)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectSymbol?.(r.symbol);
-                  }
-                }}
-              >
-                <td className="symbol-cell">{r.symbol}</td>
-                <td>{formatCurrency(r.current)}</td>
-                <td className={r.percentChange >= 0 ? 'positive' : 'negative'}>{formatPercent(r.percentChange)}</td>
-                <td>{formatVolume(r.volume)}</td>
-                <td>{r.relativeVolume != null ? `${r.relativeVolume.toFixed(2)}x` : '—'}</td>
-                <td>{formatCompact(r.floatShares)}</td>
-                <td>{formatCompact(r.marketCap)}</td>
-              </tr>
+              <MoverRow key={r.symbol} r={r} onSelectSymbol={onSelectSymbol} />
             ))}
             {pageRows.length === 0 && (
               <tr><td colSpan={7} className="empty-hint">No data</td></tr>
@@ -107,18 +125,25 @@ export default function ActiveStocks({ onSelectSymbol }) {
   const [movers, setMovers] = useState(null);
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  // Guards against an overlapping request (e.g. the 60s tick fires again before a slow prior
+  // request resolves) applying an older response after a newer one already landed.
+  const requestId = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
     function load() {
+      const id = ++requestId.current;
       api
         .movers()
         .then((data) => {
-          if (cancelled) return;
+          if (cancelled || id !== requestId.current) return;
           setMovers(data);
           setError('');
         })
-        .catch((err) => !cancelled && setError(err.message));
+        .catch((err) => {
+          if (cancelled || id !== requestId.current) return;
+          setError(err.message);
+        });
     }
     load();
     const interval = setInterval(load, 60000);
@@ -140,10 +165,24 @@ export default function ActiveStocks({ onSelectSymbol }) {
   }
 
   const loading = !movers;
+  const staleCount = movers?.stale?.length || 0;
 
   return (
     <div>
-      <h3 className="subsection-title">Active Stocks</h3>
+      <h3 className="subsection-title">
+        Active Stocks
+        {movers?.asOf && <span className="asof-hint"> · updated {formatAge(movers.asOf)}</span>}
+      </h3>
+      {movers?.degraded && (
+        <div className="banner warning">
+          Live data lookup is degraded right now - showing the last good snapshot instead of a partial refresh.
+        </div>
+      )}
+      {!movers?.degraded && staleCount > 0 && (
+        <div className="banner warning">
+          {staleCount} symbol{staleCount === 1 ? '' : 's'} couldn't be refreshed this cycle and {staleCount === 1 ? 'is' : 'are'} temporarily excluded: {movers.stale.join(', ')}
+        </div>
+      )}
       <div className="active-stocks-grid">
         <MoversTable
           title="Biggest Gainers"

@@ -178,6 +178,22 @@ h1, h2, h3, h4 {
   margin-bottom: 16px;
 }
 
+.banner.warning {
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  color: #ffb020;
+  padding: 8px 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.asof-hint {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.8em;
+}
+
 .search-bar {
   position: relative;
   margin-bottom: 24px;
