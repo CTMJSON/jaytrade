@@ -188,10 +188,26 @@ h1, h2, h3, h4 {
   font-size: 0.85rem;
 }
 
-.asof-hint {
+.asof-hint,
+.as-of-hint {
   color: var(--text-dim);
   font-weight: 400;
   font-size: 0.8em;
+}
+
+.index-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+
+.index-meta .banner.warning.index-stale {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0;
+  font-size: 0.72em;
+  line-height: 1.4;
 }
 
 .search-bar {
