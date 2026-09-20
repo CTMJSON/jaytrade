@@ -178,6 +178,38 @@ h1, h2, h3, h4 {
   margin-bottom: 16px;
 }
 
+.banner.warning {
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  color: #ffb020;
+  padding: 8px 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+}
+
+.asof-hint,
+.as-of-hint {
+  color: var(--text-dim);
+  font-weight: 400;
+  font-size: 0.8em;
+}
+
+.index-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+
+.index-meta .banner.warning.index-stale {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0;
+  font-size: 0.72em;
+  line-height: 1.4;
+}
+
 .search-bar {
   position: relative;
   margin-bottom: 24px;

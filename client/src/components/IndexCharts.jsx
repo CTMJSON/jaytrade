@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ComposedChart, Area, ResponsiveContainer, YAxis, Tooltip } from 'recharts';
 import { api } from '../api';
-import { formatCurrency, formatPercent } from '../format';
+import { formatAge, formatCurrency, formatPercent } from '../format';
 import { PanelError, Skeleton } from './Skeleton';
 import InfoTip from './InfoTip';
 
@@ -14,22 +14,23 @@ export default function IndexCharts() {
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    let cancelled = false;
+    let requestId = 0;
     async function load() {
+      const id = ++requestId;
       try {
         const data = await api.indices();
-        if (!cancelled) {
-          setIndices(data);
-          setError('');
-        }
+        if (id !== requestId) return;
+        setIndices(data);
+        setError('');
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (id !== requestId) return;
+        setError(err.message);
       }
     }
     load();
     const interval = setInterval(load, 5 * 60000);
     return () => {
-      cancelled = true;
+      requestId += 1;
       clearInterval(interval);
     };
   }, [reloadKey]);
@@ -103,6 +104,10 @@ export default function IndexCharts() {
               <div className="index-label">{idx.label}</div>
               <div className={`index-price ${isGain ? 'positive' : 'negative'}`}>
                 {formatCurrency(last)} <span>{formatPercent(changePercent)}</span>
+              </div>
+              <div className="index-meta">
+                {idx.asOf != null && <span className="as-of-hint">as of {formatAge(idx.asOf)}</span>}
+                {idx.degraded && <span className="banner warning index-stale">stale</span>}
               </div>
               <ResponsiveContainer width="100%" height={60}>
                 <ComposedChart data={idx.points}>

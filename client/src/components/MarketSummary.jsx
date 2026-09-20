@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Area, ComposedChart, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Line } from 'recharts';
 import { api } from '../api';
-import { formatCurrency, formatPercent } from '../format';
+import { formatAge, formatCurrency, formatPercent } from '../format';
+import { useLiveQuote, mergeLiveQuote } from '../store/useLiveQuote';
 import { PanelError, Skeleton } from './Skeleton';
 import InfoTip from './InfoTip';
 import TimeframeToggle, { CHART_TIMEFRAMES } from './TimeframeToggle';
@@ -40,21 +41,29 @@ function makeTickFormatter(rangeKey) {
 export default function MarketSummary({ onSelectSymbol }) {
   const [symbols, setSymbols] = useState(DEFAULT_SYMBOLS);
   const [quotes, setQuotes] = useState({});
+  const [quotesAsOf, setQuotesAsOf] = useState(null);
   const [selected, setSelected] = useState('SPY');
   const [chart, setChart] = useState(null);
   const [searchInput, setSearchInput] = useState('');
   const [error, setError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
+  const live = useLiveQuote(selected);
 
+  // `requestId` guards both effects below against an overlapping/out-of-order response:
+  // it's bumped in the cleanup function, so a response from a superseded effect run (component
+  // re-ran the effect, or unmounted) is detected and dropped instead of applied over newer state.
   useEffect(() => {
+    let requestId = 0;
     api
       .movers()
       .then((data) => {
+        if (requestId !== 0) return;
         const combined = [...data.gainers, ...data.losers];
         const bySymbol = {};
         combined.forEach((q) => { bySymbol[q.symbol] = q; });
         setQuotes(bySymbol);
+        setQuotesAsOf(data.asOf ?? null);
         const top = combined
           .slice()
           .sort((a, b) => Math.abs(b.percentChange) - Math.abs(a.percentChange))
@@ -63,21 +72,24 @@ export default function MarketSummary({ onSelectSymbol }) {
         if (top.length) setSymbols(top);
       })
       .catch(() => {});
+    return () => {
+      requestId += 1;
+    };
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    let requestId = 0;
     setError('');
     setChart(null);
     api
       .history(selected, timeframe.range, timeframe.interval)
       .then((data) => {
-        if (cancelled) return;
+        if (requestId !== 0) return;
         setChart({ ...data, points: withMovingAverage(data.points) });
       })
-      .catch((err) => !cancelled && setError(err.message));
+      .catch((err) => requestId === 0 && setError(err.message));
     return () => {
-      cancelled = true;
+      requestId += 1;
     };
   }, [selected, reloadKey, timeframe.range, timeframe.interval]);
 
@@ -105,6 +117,11 @@ export default function MarketSummary({ onSelectSymbol }) {
   const lineColor = isGain ? GREEN : RED;
   const formatTick = makeTickFormatter(timeframe.key);
   const priceFlash = useFlash(priceChange?.last);
+  // Overlays a live WS push (if fresher) onto the chart-derived price, so the header ticks in
+  // real time between /api/history polls instead of only updating on the next chart refresh.
+  const displayPrice = priceChange && live
+    ? mergeLiveQuote({ current: priceChange.last, percentChange: priceChange.percent }, live)
+    : priceChange;
 
   return (
     <div className="panel market-summary">
@@ -128,7 +145,8 @@ export default function MarketSummary({ onSelectSymbol }) {
           </thead>
           <tbody>
             {symbols.map((symbol) => {
-              const q = quotes[symbol];
+              const row = quotes[symbol];
+              const q = symbol === selected && row && live ? mergeLiveQuote(row, live) : row;
               const gain = q ? q.percentChange >= 0 : true;
               return (
                 <tr
@@ -158,12 +176,13 @@ export default function MarketSummary({ onSelectSymbol }) {
           <div className="chart-header">
             <div className="chart-title">
               <span className="chart-symbol">{selected}</span>
-              {priceChange && (
+              {displayPrice && (
                 <span className={`${isGain ? 'positive' : 'negative'} ${priceFlash}`}>
                   <span className="delta-arrow" aria-hidden="true">{isGain ? '▲' : '▼'}</span>
-                  {formatCurrency(priceChange.last)} ({formatPercent(priceChange.percent)})
+                  {formatCurrency(displayPrice.current)} ({formatPercent(displayPrice.percentChange)})
                 </span>
               )}
+              {displayPrice && <span className="as-of-hint">as of {formatAge(quotesAsOf)}</span>}
             </div>
             <form onSubmit={handleSearchSubmit}>
               <input

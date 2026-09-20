@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, auth } from './api';
 import Portfolio from './components/Portfolio';
 import TradeHistory from './components/TradeHistory';
@@ -31,6 +31,12 @@ function AppShell() {
   // Bumped after a trade so the equity curve refetches without polling on its own.
   const [tradeVersion, setTradeVersion] = useState(0);
   const totalValueFlash = useFlash(portfolio?.totalValue);
+  // Guards the 15s poll below against overlapping requests: if a round trip runs long (slow
+  // upstream, backgrounded tab, etc.) and the next tick fires before it resolves, only the
+  // response from the LATEST request is ever applied - otherwise an older, slower response
+  // landing after a newer one had already rendered would silently revert the header portfolio
+  // value to stale numbers.
+  const refreshRequestId = useRef(0);
 
   useEffect(() => {
     function handleUnauthorized() {
@@ -45,12 +51,17 @@ function AppShell() {
   }, []);
 
   const refresh = useCallback(async () => {
+    const requestId = ++refreshRequestId.current;
     try {
       const [portfolioData, tradesData] = await Promise.all([api.portfolio(), api.trades()]);
+      // A newer refresh() call was started (and possibly already resolved) while this one was
+      // in flight - drop this response rather than letting it clobber more current state.
+      if (requestId !== refreshRequestId.current) return;
       setPortfolio(portfolioData);
       setTrades(tradesData);
       setError('');
     } catch (err) {
+      if (requestId !== refreshRequestId.current) return;
       setError(err.message);
     }
   }, []);

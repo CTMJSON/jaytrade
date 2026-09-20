@@ -16,11 +16,13 @@ import db from './db.js';
 // which works instantly here) sidesteps that entirely instead of just biasing the order.
 dns.setDefaultResultOrder('ipv4first');
 setGlobalDispatcher(new Agent({ connect: { family: 4 } }));
-import { searchSymbols, getQuote, getProfile, getRecommendationTrends } from './finnhub.js';
+import { searchSymbols, getQuote, getQuoteWithMeta, getProfile, getRecommendationTrends } from './finnhub.js';
+import { getLiveQuote, subscribeQuotes, onQuoteUpdate, isLiveFeedEnabled } from './live-quotes.js';
 import { executeTrade, TradeError } from './trading.js';
 import { createOrder, listOrders, cancelOrder, checkAndExecuteOrders } from './orders.js';
 import { computeMovers, computeIndices, computeHistory } from './dashboard.js';
 import { startCacheWarmer } from './warmer.js';
+import { INDEX_PROXIES, MOVERS_WATCHLIST } from './watchlist.js';
 import { buildPortfolioSummary } from './portfolio-analytics.js';
 import { buildPortfolioHistory } from './portfolio-history.js';
 import { get52WeekRange } from './marketdata.js';
@@ -99,13 +101,67 @@ app.get('/api/search', async (req, res) => {
 app.get('/api/quote/:symbol', async (req, res) => {
   const symbol = req.params.symbol.toUpperCase();
   try {
-    const quote = await getQuote(symbol);
-    if (!quote) return res.status(404).json({ error: 'Symbol not found' });
+    // Opportunistically add this symbol to the shared live feed (no-op if already subscribed
+    // or if the feed is disabled/at its symbol cap) so future requests - and the SSE stream -
+    // get push updates for it instead of relying solely on REST polling.
+    subscribeQuotes([symbol]);
+
+    const { value: restQuote, updatedAt: restAsOf } = await getQuoteWithMeta(symbol);
+    if (!restQuote) return res.status(404).json({ error: 'Symbol not found' });
+
+    const live = getLiveQuote(symbol);
+    const quote =
+      live && live.asOf > restAsOf
+        ? { ...restQuote, current: live.current, change: live.change ?? restQuote.change,
+            percentChange: live.percentChange ?? restQuote.percentChange, asOf: live.asOf, source: 'ws' }
+        : { ...restQuote, asOf: restAsOf, source: 'rest' };
+
     const profile = await getProfile(symbol);
     res.json({ ...quote, name: profile?.name || symbol, logo: profile?.logo || null });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+
+// Server-sent-events stream of live quote pushes for the requested symbols. The client opens
+// ONE connection per symbol set (see client/src/store/marketStore.js) instead of each panel
+// polling `/api/quote` on its own timer - every subscriber sees the same push, in the order
+// Finnhub actually sent it, so there's no overlapping-request race to land out of order.
+app.get('/api/quotes/stream', (req, res) => {
+  const symbols = String(req.query.symbols || '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+  if (!symbols.length) return res.status(400).json({ error: 'symbols query param is required' });
+
+  subscribeQuotes(symbols);
+
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+  });
+  res.flushHeaders();
+
+  const wanted = new Set(symbols);
+  // Send whatever we already have immediately so the client isn't blank until the next trade.
+  for (const symbol of wanted) {
+    const entry = getLiveQuote(symbol);
+    if (entry) res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  }
+  if (!isLiveFeedEnabled()) {
+    res.write(`event: disabled\ndata: ${JSON.stringify({ reason: 'FINNHUB_API_KEY not set' })}\n\n`);
+  }
+
+  const unsubscribe = onQuoteUpdate((entry) => {
+    if (wanted.has(entry.symbol)) res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  });
+  const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 20000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    unsubscribe();
+  });
 });
 
 app.get('/api/recommendation/:symbol', async (req, res) => {
@@ -278,6 +334,17 @@ setInterval(() => {
 }, ORDER_POLL_INTERVAL);
 
 startCacheWarmer();
+
+// Prime the live feed with the symbols we know we'll want on every page load. Finnhub's free
+// WebSocket tier caps subscriptions at 50 symbols total; the 4 index proxies are prioritized
+// (they're on every dashboard) and the 50-symbol movers watchlist fills the rest, so a handful
+// of the least-recently-added movers symbols stay REST-only until the cap is raised or the
+// watchlist is trimmed - see live-quotes.js's MAX_WS_SYMBOLS comment.
+if (isLiveFeedEnabled()) {
+  subscribeQuotes([...INDEX_PROXIES.map((p) => p.symbol), ...MOVERS_WATCHLIST]);
+} else {
+  console.warn('[live-quotes] FINNHUB_API_KEY not set - live WebSocket quotes disabled, all quotes will use REST polling fallback');
+}
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
