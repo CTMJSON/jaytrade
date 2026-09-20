@@ -1,4 +1,4 @@
-import { cached } from './cache.js';
+import { cached, cachedWithMeta } from './cache.js';
 import { withRetry, fetchWithTimeout } from './retry.js';
 
 const BASE_URL = 'https://finnhub.io/api/v1';
@@ -28,8 +28,29 @@ export async function searchSymbols(query) {
   });
 }
 
+const QUOTE_TTL_MS = 15 * 1000;
+
 export async function getQuote(symbol) {
-  return cached(`quote:${symbol}`, 15 * 1000, async () => {
+  return cached(`quote:${symbol}`, QUOTE_TTL_MS, async () => {
+    const data = await finnhubFetch(`/quote?symbol=${encodeURIComponent(symbol)}`);
+    if (data.c === 0 && data.h === 0 && data.l === 0) return null;
+    return {
+      symbol,
+      current: data.c,
+      change: data.d,
+      percentChange: data.dp,
+      high: data.h,
+      low: data.l,
+      open: data.o,
+      previousClose: data.pc,
+    };
+  });
+}
+
+/** Same as `getQuote`, but also reports when this value was actually fetched, so API responses
+ * can be honest about freshness instead of presenting every field as if it were current-instant. */
+export async function getQuoteWithMeta(symbol) {
+  return cachedWithMeta(`quote:${symbol}`, QUOTE_TTL_MS, async () => {
     const data = await finnhubFetch(`/quote?symbol=${encodeURIComponent(symbol)}`);
     if (data.c === 0 && data.h === 0 && data.l === 0) return null;
     return {
