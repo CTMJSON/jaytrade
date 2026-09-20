@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import { formatCurrency, formatPercent } from '../format';
+import { formatAge, formatCurrency, formatPercent } from '../format';
 import { useLiveQuote, mergeLiveQuote } from '../store/useLiveQuote';
 
 function TickerItem({ m, onSelectSymbol }) {
   const live = useLiveQuote(m.symbol);
   const row = mergeLiveQuote(m, live);
-  const isGain = row.change >= 0;
+  // Match the gain/loss color to percentChange (as every other panel does) rather than the
+  // dollar `change` field, so a symbol never renders green/red inconsistently with its own
+  // percent figure if one field is ever missing/stale relative to the other.
+  const isGain = row.percentChange >= 0;
   return (
     <button
       className={`ticker-item ${isGain ? 'positive' : 'negative'}`}
@@ -27,6 +30,9 @@ export default function MoversTicker({ onSelectSymbol }) {
   const [error, setError] = useState('');
   // Guards against an overlapping request applying an older response after a newer one landed.
   const requestId = useRef(0);
+  // Ticks every few seconds purely to re-render the "Updated Xs ago" label below - the
+  // underlying movers data itself only refreshes on the 60s poll.
+  const [, setClockTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +51,11 @@ export default function MoversTicker({ onSelectSymbol }) {
       cancelled = true;
       clearInterval(interval);
     };
+  }, []);
+
+  useEffect(() => {
+    const clock = setInterval(() => setClockTick((t) => t + 1), 5000);
+    return () => clearInterval(clock);
   }, []);
 
   if (error && !movers) {
@@ -68,11 +79,21 @@ export default function MoversTicker({ onSelectSymbol }) {
 
   return (
     <div className="ticker-wrap">
-      <div className="ticker-track">
-        {[...items, ...items].map((m, i) => (
-          <TickerItem key={`${m.symbol}-${i}`} m={m} onSelectSymbol={onSelectSymbol} />
-        ))}
+      <span className="ticker-label" title="Today's biggest gainers and losers, not every stock">
+        Today's Movers
+      </span>
+      <div className="ticker-scroll-area">
+        <div className="ticker-track">
+          {[...items, ...items].map((m, i) => (
+            <TickerItem key={`${m.symbol}-${i}`} m={m} onSelectSymbol={onSelectSymbol} />
+          ))}
+        </div>
       </div>
+      {movers.asOf && (
+        <span className="ticker-timestamp" title="How long ago this batch of movers was refreshed">
+          Updated {formatAge(movers.asOf)}
+        </span>
+      )}
     </div>
   );
 }
