@@ -87,10 +87,10 @@ function MoversTable({ title, rows, loading, onSelectSymbol }) {
               <th>Ticker</th>
               <th>Price</th>
               <th>Change</th>
-              <th>Vol</th>
-              <th>RVol</th>
-              <th>Float</th>
-              <th>MCap</th>
+              <th><abbr title="Trading volume today">Vol</abbr></th>
+              <th><abbr title="Relative Volume: today's volume vs. the average. 2x means twice the usual trading activity.">RVol</abbr></th>
+              <th><abbr title="Float: shares available for public trading (excludes insider lockups)">Float</abbr></th>
+              <th><abbr title="Market Cap: total company value = share price × total shares">MCap</abbr></th>
             </tr>
           </thead>
           <tbody>
